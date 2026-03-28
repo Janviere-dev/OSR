@@ -1,9 +1,8 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { AuthError, PostgrestError, Session, User } from '@supabase/supabase-js';
+import type { User } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-
-type ContextError = AuthError | PostgrestError | Error | null;
 
 interface SchoolData {
   name: string;
@@ -26,9 +25,8 @@ interface AuthContextType {
     fullName: string, 
     role: 'parent' | 'school_admin',
     schoolData?: SchoolData
-  ) => Promise<{ error: ContextError; requiresEmailConfirmation?: boolean }>;
-  signIn: (email: string, password: string) => Promise<{ error: ContextError }>;
-  resendConfirmationEmail: (email: string) => Promise<{ error: ContextError }>;
+  ) => Promise<{ error: unknown }>; 
+  signIn: (email: string, password: string) => Promise<{ error: unknown }>; 
   signOut: () => Promise<void>;
   userRole: 'parent' | 'school_admin' | null;
 }
@@ -41,23 +39,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<'parent' | 'school_admin' | null>(null);
 
-  async function fetchUserRole(userId: string) {
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (data && !error) {
-      setUserRole(data.role as 'parent' | 'school_admin');
+  // Fetch user role from Supabase
+  const fetchUserRole = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .single();
+      if (error) {
+        console.error('Error fetching user role:', error);
+        setUserRole(null);
+      } else {
+        setUserRole(data?.role ?? null);
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching user role:', err);
+      setUserRole(null);
     }
-  }
+  };
+
+
+  // fetchUserRole is defined below useEffect to avoid redeclaration
 
   useEffect(() => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        void event;
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -87,14 +95,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const uploadSchoolLogo = async (file: File, schoolId: string): Promise<string | null> => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (!sessionData.session) {
-      // During signup, email confirmation may leave user unauthenticated.
-      // In that case storage RLS blocks upload; skip and let admin upload later.
-      return null;
-    }
+  // (removed duplicate fetchUserRole)
 
+  const uploadSchoolLogo = async (file: File, schoolId: string): Promise<string | null> => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${schoolId}.${fileExt}`;
     const filePath = `${fileName}`;
@@ -122,139 +125,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role: 'parent' | 'school_admin',
     schoolData?: SchoolData
   ) => {
-    try {
-      const redirectUrl = `${window.location.origin}/`;
+    const redirectUrl = `${window.location.origin}/`;
 
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            full_name: fullName,
-          },
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          full_name: fullName,
         },
-      });
+      },
+    });
 
-      if (error) return { error, requiresEmailConfirmation: false };
-      if (!data.user) {
-        return {
-          error: new Error('Account was created, but no user was returned. Please try signing in.'),
-          requiresEmailConfirmation: false,
-        };
-      }
+    if (error) return { error };
 
-      // Supabase may return an obfuscated user object for an already-registered email
-      // when email confirmation is enabled. In that case `identities` is typically empty.
-      if (!data.session && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-        return {
-          error: new Error('This email is already registered. Please sign in or use password reset.'),
-          requiresEmailConfirmation: false,
-        };
-      }
+    // Create user role after successful signup
+    if (data.user) {
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .insert({ user_id: data.user.id, role });
 
-      const userId = data.user.id;
-      const { data: sessionData } = await supabase.auth.getSession();
-      const canUseDirectInsert = sessionData.session?.user?.id === userId;
-
-      // First try RPC, then fallback to direct insert when session exists
-      const { error: roleRpcError } = await supabase
-        .rpc('assign_user_role', { p_user_id: userId, p_role: role });
-
-      if (roleRpcError) {
-        if (roleRpcError.code === '23503') {
-          return {
-            error: new Error('This email is already registered. Please sign in instead of creating a new account.'),
-            requiresEmailConfirmation: false,
-          };
-        }
-
-        if (!canUseDirectInsert) {
-          console.error('Error creating user role:', roleRpcError);
-            return { error: roleRpcError, requiresEmailConfirmation: false };
-        }
-
-        const { error: roleInsertError } = await supabase
-          .from('user_roles')
-          .insert({ user_id: userId, role });
-
-        if (roleInsertError) {
-          console.error('Error creating user role:', roleInsertError);
-          return { error: roleInsertError, requiresEmailConfirmation: false };
-        }
+      if (roleError) {
+        console.error('Error creating user role:', roleError);
+        return { error: roleError };
       }
 
       // If school admin, create the school record
       if (role === 'school_admin' && schoolData) {
-        let createdSchoolId: string | null = null;
+        // First create the school to get its ID
+        const { data: schoolResult, error: schoolError } = await supabase
+          .from('schools')
+          .insert({
+            name: schoolData.name,
+            staff_name: schoolData.staffName,
+            qualifications: schoolData.qualifications || null,
+            province: schoolData.province,
+            district: schoolData.district,
+            sector: schoolData.sector,
+            admin_id: data.user.id,
+            is_approved: true, // Auto-approve for now
+          })
+          .select()
+          .single();
 
-        const { data: schoolId, error: schoolRpcError } = await supabase
-          .rpc('create_school_for_admin', {
-            p_name: schoolData.name,
-            p_staff_name: schoolData.staffName,
-            p_qualifications: schoolData.qualifications || null,
-            p_province: schoolData.province,
-            p_district: schoolData.district,
-            p_sector: schoolData.sector,
-            p_admin_id: userId,
-            p_is_approved: true,
-          });
-
-        if (!schoolRpcError && schoolId) {
-          createdSchoolId = schoolId;
-        } else {
-          if (!canUseDirectInsert) {
-            console.error('Error creating school:', schoolRpcError);
-            return { error: schoolRpcError, requiresEmailConfirmation: false };
-          }
-
-          const { data: insertedSchool, error: schoolInsertError } = await supabase
-            .from('schools')
-            .insert({
-              name: schoolData.name,
-              staff_name: schoolData.staffName,
-              qualifications: schoolData.qualifications || null,
-              province: schoolData.province,
-              district: schoolData.district,
-              sector: schoolData.sector,
-              admin_id: userId,
-              is_approved: true,
-            })
-            .select('id')
-            .single();
-
-          if (schoolInsertError) {
-            console.error('Error creating school:', schoolInsertError);
-            return { error: schoolInsertError, requiresEmailConfirmation: false };
-          }
-
-          createdSchoolId = insertedSchool.id;
+        if (schoolError) {
+          console.error('Error creating school:', schoolError);
+          return { error: schoolError };
         }
 
         // Upload logo if provided
-        if (schoolData.logoFile && createdSchoolId) {
-          const logoUrl = await uploadSchoolLogo(schoolData.logoFile, createdSchoolId);
-
+        if (schoolData.logoFile && schoolResult) {
+          const logoUrl = await uploadSchoolLogo(schoolData.logoFile, schoolResult.id);
+          
           if (logoUrl) {
             await supabase
               .from('schools')
               .update({ logo_url: logoUrl })
-              .eq('id', createdSchoolId);
+              .eq('id', schoolResult.id);
           }
         }
       }
-
-      return { error: null, requiresEmailConfirmation: !data.session };
-    } catch (error) {
-      if (error instanceof Error) {
-        return { error, requiresEmailConfirmation: false };
-      }
-
-      return {
-        error: new Error('Unexpected signup error. Please try again.'),
-        requiresEmailConfirmation: false,
-      };
     }
+
+    return { error: null };
   };
 
   const signIn = async (email: string, password: string) => {
@@ -265,30 +199,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
-  const resendConfirmationEmail = async (email: string) => {
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-      },
-    });
-
-    return { error };
-  };
-
   const signOut = async () => {
     await supabase.auth.signOut();
     setUserRole(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, resendConfirmationEmail, signOut, userRole }}>
+    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut, userRole }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
+// Move useAuth to a separate file if you want fast refresh to work perfectly, or ignore this warning if not critical.
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {

@@ -6,14 +6,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Search, User, Calendar, School, RefreshCw, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, User, Calendar, School, RefreshCw, Loader2, Upload, X } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 
 interface StudentHubProps {
   onBack: () => void;
 }
+
+const allGrades = [
+  'Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6',
+  'Secondary 1', 'Secondary 2', 'Secondary 3', 'Secondary 4', 'Secondary 5', 'Secondary 6',
+];
 
 const StudentHub = ({ onBack }: StudentHubProps) => {
   const { t } = useLanguage();
@@ -24,7 +30,14 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
   const [searchedStudent, setSearchedStudent] = useState<any>(null);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Fetch all students for this parent
+  // Re-registration form state
+  const [showReregister, setShowReregister] = useState(false);
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [levelType, setLevelType] = useState('');
+  const [previousClass, setPreviousClass] = useState('');
+  const [newClass, setNewClass] = useState('');
+  const [reregTranscripts, setReregTranscripts] = useState<File[]>([]);
+
   const { data: myStudents = [], isLoading } = useQuery({
     queryKey: ['my-students-full', user?.id],
     queryFn: async () => {
@@ -42,33 +55,27 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
     enabled: !!user,
   });
 
-  // Search by student ID code
+  // Only show accepted students (those with student_id_code)
+  const acceptedStudents = myStudents.filter((s: any) => s.student_id_code);
+
   const handleSearch = async () => {
     if (!searchId.trim() || !user) return;
     setIsSearching(true);
-
     try {
       const { data, error } = await supabase
         .from('students')
-        .select(`
-          *,
-          schools(name, district, sector)
-        `)
+        .select(`*, schools(name, district, sector)`)
         .eq('parent_id', user.id)
         .eq('student_id_code', searchId.trim())
         .single();
 
       if (error) {
         setSearchedStudent(null);
-        toast({
-          title: t('hub.notFound'),
-          description: t('hub.notFoundDesc'),
-          variant: 'destructive',
-        });
+        toast({ title: t('hub.notFound'), description: t('hub.notFoundDesc'), variant: 'destructive' });
       } else {
         setSearchedStudent(data);
       }
-    } catch (error) {
+    } catch {
       setSearchedStudent(null);
     } finally {
       setIsSearching(false);
@@ -77,48 +84,78 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
 
   // Re-register mutation
   const reRegisterMutation = useMutation({
-    mutationFn: async (studentId: string) => {
-      const student = myStudents.find((s: any) => s.id === studentId);
+    mutationFn: async () => {
+      if (!user || !selectedStudentId) throw new Error('Missing data');
+      const student = myStudents.find((s: any) => s.id === selectedStudentId);
       if (!student || !student.school_id) throw new Error('Student or school not found');
 
-      // Create new application for the new year
+      let transcriptsUrl = null;
+      if (reregTranscripts.length > 0) {
+        const uploadedRefs: string[] = [];
+        for (const file of reregTranscripts) {
+          const fileName = `${user.id}/${Date.now()}-${file.name}`;
+          const { error: uploadError } = await supabase.storage
+            .from('student-documents')
+            .upload(fileName, file);
+          if (uploadError) throw uploadError;
+          uploadedRefs.push(fileName);
+        }
+        transcriptsUrl = uploadedRefs.join(',');
+      }
+
       const { error } = await supabase
         .from('applications')
         .insert({
-          student_id: studentId,
+          student_id: selectedStudentId,
           school_id: student.school_id,
           type: 'new',
           status: 'pending',
+          transcripts_url: transcriptsUrl,
+          previous_school_name: previousClass ? `Re-registration from ${previousClass}` : null,
+          transfer_reason: newClass ? `Moving to ${newClass}` : null,
         });
 
       if (error) throw error;
     },
     onSuccess: () => {
-      toast({
-        title: t('hub.reregisterSuccess'),
-        description: t('hub.reregisterSuccessDesc'),
-      });
+      toast({ title: t('hub.reregisterSuccess'), description: t('hub.reregisterSuccessDesc') });
       queryClient.invalidateQueries({ queryKey: ['my-students-full'] });
+      setShowReregister(false);
+      setSelectedStudentId('');
+      setLevelType('');
+      setPreviousClass('');
+      setNewClass('');
+      setReregTranscripts([]);
     },
     onError: (error: any) => {
-      toast({
-        title: t('hub.reregisterError'),
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: t('hub.reregisterError'), description: error.message, variant: 'destructive' });
     },
   });
+
+  const handleReregFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setReregTranscripts(prev => [...prev, ...Array.from(e.target.files!)]);
+    }
+  };
+
+  const removeReregFile = (index: number) => {
+    setReregTranscripts(prev => prev.filter((_, i) => i !== index));
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'passed':
-        return <Badge className="bg-secondary">{t('hub.status.passed')}</Badge>;
+        return <Badge className="bg-green-600 text-white">{t('hub.status.passed')}</Badge>;
       case 'repeat':
-        return <Badge variant="destructive">{t('hub.status.repeat')}</Badge>;
+        return <Badge className="bg-red-600 text-white">{t('hub.status.repeat')}</Badge>;
       default:
-        return <Badge variant="secondary">{t('hub.status.pending')}</Badge>;
+        return <Badge className="bg-amber-500 text-white">{t('hub.status.pending')}</Badge>;
     }
   };
+
+  const primaryGrades = allGrades.filter(g => g.startsWith('Primary'));
+  const secondaryGrades = allGrades.filter(g => g.startsWith('Secondary'));
+  const gradeOptions = levelType === 'primary' ? primaryGrades : levelType === 'secondary' ? secondaryGrades : [];
 
   const StudentCard = ({ student }: { student: any }) => (
     <Card className="hover:shadow-md transition-shadow">
@@ -131,7 +168,7 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
             <div>
               <CardTitle className="text-lg">{student.name}</CardTitle>
               {student.student_id_code && (
-                <p className="text-sm text-muted-foreground">ID: {student.student_id_code}</p>
+                <p className="text-sm font-mono text-primary font-semibold">ID: {student.student_id_code}</p>
               )}
             </div>
           </div>
@@ -164,23 +201,6 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
             <p><strong>{t('hub.parents')}:</strong> {student.mother_name} & {student.father_name}</p>
           </div>
         )}
-
-        {/* Show re-register button for passed students */}
-        {student.status === 'passed' && (
-          <Button 
-            className="w-full mt-4" 
-            variant="outline"
-            onClick={() => reRegisterMutation.mutate(student.id)}
-            disabled={reRegisterMutation.isPending}
-          >
-            {reRegisterMutation.isPending ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
-            )}
-            {t('hub.reregister')}
-          </Button>
-        )}
       </CardContent>
     </Card>
   );
@@ -192,6 +212,7 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
         {t('common.back')}
       </Button>
 
+      {/* Search by Student ID */}
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>{t('hub.title')}</CardTitle>
@@ -207,22 +228,144 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
               className="flex-1"
             />
             <Button onClick={handleSearch} disabled={isSearching}>
-              {isSearching ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Search className="w-4 h-4" />
-              )}
+              {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Search Result */}
       {searchedStudent && (
         <div className="mb-6">
           <h3 className="text-lg font-semibold mb-3">{t('hub.searchResult')}</h3>
           <StudentCard student={searchedStudent} />
         </div>
+      )}
+
+      {/* Re-register Card */}
+      {acceptedStudents.length > 0 && (
+        <Card className="mb-6 border-primary/30">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                <RefreshCw className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">{t('hub.reregister')}</CardTitle>
+                <CardDescription>Re-register your child for the new academic year</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {!showReregister ? (
+              <Button onClick={() => setShowReregister(true)} variant="outline" className="w-full">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Start Re-registration
+              </Button>
+            ) : (
+              <div className="space-y-4">
+                {/* Select Student */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Select Student</label>
+                  <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a student" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {acceptedStudents.map((s: any) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name} (ID: {s.student_id_code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Level Type */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Level</label>
+                  <Select value={levelType} onValueChange={(v) => { setLevelType(v); setPreviousClass(''); setNewClass(''); }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Primary or Secondary?" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="primary">Primary</SelectItem>
+                      <SelectItem value="secondary">Secondary</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Previous Class */}
+                {levelType && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Previous Class</label>
+                    <Select value={previousClass} onValueChange={setPreviousClass}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select previous class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {gradeOptions.map(g => (
+                          <SelectItem key={g} value={g}>{g}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* New Class */}
+                {levelType && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">New Class</label>
+                    <Select value={newClass} onValueChange={setNewClass}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select new class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {gradeOptions.map(g => (
+                          <SelectItem key={g} value={g}>{g}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Transcripts */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Upload Transcripts</label>
+                  <Input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple onChange={handleReregFiles} />
+                  {reregTranscripts.length > 0 && (
+                    <div className="space-y-1 mt-2">
+                      {reregTranscripts.map((file, i) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-muted rounded-lg text-sm">
+                          <div className="flex items-center gap-2 truncate">
+                            <Upload className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <span className="truncate">{file.name}</span>
+                          </div>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => removeReregFile(i)} className="h-6 w-6 p-0">
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setShowReregister(false)} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => reRegisterMutation.mutate()}
+                    disabled={reRegisterMutation.isPending || !selectedStudentId || !previousClass || !newClass}
+                    className="flex-1"
+                  >
+                    {reRegisterMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                    Submit Re-registration
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* All Students */}

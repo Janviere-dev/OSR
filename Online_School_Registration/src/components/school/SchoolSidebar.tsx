@@ -24,7 +24,9 @@ import {
   Settings, 
   LogOut,
   Building2,
-  Sparkles
+  Sparkles,
+  Landmark,
+  MessageSquare
 } from 'lucide-react';
 
 interface SchoolSidebarProps {
@@ -54,6 +56,8 @@ export function SchoolSidebar({ school }: SchoolSidebarProps) {
     { title: t('school.nav.dashboard'), icon: LayoutDashboard, path: '/school' },
     { title: t('school.nav.applications'), icon: FileText, path: '/school/applications' },
     { title: t('school.nav.students'), icon: Users, path: '/school/students' },
+    { title: t('school.welcome.govPortal'), icon: Landmark, path: '/school/government' },
+    { title: t('chat.inbox'), icon: MessageSquare, path: '/school/inbox' },
     { title: t('school.nav.settings'), icon: Settings, path: '/school/settings' },
   ];
 

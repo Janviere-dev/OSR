@@ -6,13 +6,14 @@ import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { UserPlus, ArrowRightLeft, CreditCard, Users } from 'lucide-react';
+import { UserPlus, ArrowRightLeft, CreditCard, Users, MessageSquare } from 'lucide-react';
 import RegisterStudentForm from '@/components/parent/RegisterStudentForm';
 import TransferStudentForm from '@/components/parent/TransferStudentForm';
 import PaymentForm from '@/components/parent/PaymentForm';
 import StudentHub from '@/components/parent/StudentHub';
+import ChatInbox from '@/components/chat/ChatInbox';
 
-type ActiveView = 'dashboard' | 'register' | 'transfer' | 'payment' | 'hub';
+type ActiveView = 'dashboard' | 'register' | 'transfer' | 'payment' | 'hub' | 'inbox';
 
 const ParentDashboard = () => {
   const { user, loading, userRole } = useAuth();
@@ -47,6 +48,8 @@ const ParentDashboard = () => {
         return <PaymentForm onBack={() => setActiveView('dashboard')} />;
       case 'hub':
         return <StudentHub onBack={() => setActiveView('dashboard')} />;
+      case 'inbox':
+        return <ChatInbox role="parent" onBack={() => setActiveView('dashboard')} />;
       default:
         return (
           <div className="space-y-8">
@@ -123,6 +126,22 @@ const ParentDashboard = () => {
                 </CardHeader>
                 <CardContent className="text-center">
                   <Button variant="ghost" className="w-full">{t('dashboard.viewStudents')}</Button>
+                </CardContent>
+              </Card>
+
+              {/* Inbox */}
+              <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary/30 md:col-span-2" onClick={() => setActiveView('inbox')}>
+                <CardHeader className="text-center">
+                  <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                    <MessageSquare className="w-8 h-8 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl">{t('dashboard.inbox')}</CardTitle>
+                  <CardDescription>
+                    {t('dashboard.inboxDesc')}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="text-center">
+                  <Button variant="outline" className="w-full">{t('dashboard.openInbox')}</Button>
                 </CardContent>
               </Card>
             </div>

@@ -15,6 +15,8 @@ interface School {
   district: string;
   sector: string;
   requirements_pdf_url?: string | null;
+  description?: string | null;
+  showcase_image_url?: string | null;
 }
 
 export function SchoolDiscovery() {
@@ -37,7 +39,7 @@ export function SchoolDiscovery() {
     setLoading(true);
     const { data, error } = await supabase
       .from('schools')
-      .select('id, name, logo_url, province, district, sector, requirements_pdf_url')
+      .select('id, name, logo_url, province, district, sector, requirements_pdf_url, description, showcase_image_url')
       .eq('is_approved', true);
 
     if (error) {

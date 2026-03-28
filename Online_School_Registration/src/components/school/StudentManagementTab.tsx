@@ -1,27 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
+import { sendSystemMessage } from '@/hooks/useSendSystemMessage';
 import { 
   Loader2,
-  CheckCircle, 
-  RotateCcw,
-  AlertCircle,
   Users,
-  GraduationCap,
-  ClipboardCheck,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Download,
+  Trash2,
+  FileText
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface StudentManagementTabProps {
   schoolId: string;
@@ -33,36 +32,38 @@ interface Student {
   dob: string;
   current_grade: string | null;
   class_stream: string | null;
-  status: 'pending' | 'passed' | 'repeat';
+  status: 'pending' | 'passed' | 'repeat' | 'enrolled';
   student_id_code: string | null;
   mother_name: string | null;
   father_name: string | null;
+  mother_phone: string | null;
+  father_phone: string | null;
+  parent_phone: string | null;
+  parent_email: string | null;
+  parent_id: string;
 }
 
-const gradeOrder = [
-  'Nursery 1', 'Nursery 2', 'Nursery 3', 
-  'Primary 1', 'Primary 2', 'Primary 3', 
-  'Primary 4', 'Primary 5', 'Primary 6',
-  'Secondary 1', 'Secondary 2', 'Secondary 3',
-  'Secondary 4', 'Secondary 5', 'Secondary 6'
+const allGrades = [
+  'Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6',
+  'Secondary 1', 'Secondary 2', 'Secondary 3', 'Secondary 4', 'Secondary 5', 'Secondary 6',
 ];
+const classStreams = ['A', 'B', 'C', 'D', 'E'];
 
 export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [processDialog, setProcessDialog] = useState(false);
   const [openGrades, setOpenGrades] = useState<Set<string>>(new Set());
+  const [openStreams, setOpenStreams] = useState<Set<string>>(new Set());
 
-  // Fetch students for this school
   const { data: students = [], isLoading } = useQuery({
     queryKey: ['school-students', schoolId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('students')
-        .select('*')
+        .select('id, name, dob, current_grade, class_stream, status, student_id_code, mother_name, father_name, mother_phone, father_phone, parent_phone, parent_email, parent_id')
         .eq('school_id', schoolId)
         .order('current_grade', { ascending: true })
         .order('class_stream', { ascending: true })
@@ -73,108 +74,142 @@ export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
     },
   });
 
-  // Process results mutation
-  const processResultsMutation = useMutation({
-    mutationFn: async ({ studentId, newStatus }: { studentId: string; newStatus: 'passed' | 'repeat' }) => {
-      const { error } = await supabase
-        .from('students')
-        .update({ status: newStatus })
-        .eq('id', studentId);
-
+  // Fetch school name
+  const { data: school } = useQuery({
+    queryKey: ['school-name-mgmt', schoolId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('schools')
+        .select('name')
+        .eq('id', schoolId)
+        .single();
       if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({
-        title: t('school.students.resultProcessed'),
-        description: t('school.students.resultProcessedDesc'),
-      });
-      queryClient.invalidateQueries({ queryKey: ['school-students'] });
-      setProcessDialog(false);
-      setSelectedStudent(null);
-    },
-    onError: (error: Error) => {
-      toast({
-        title: t('school.approval.error'),
-        description: error.message,
-        variant: 'destructive',
-      });
+      return data;
     },
   });
 
-  const handleProcessResult = (status: 'passed' | 'repeat') => {
-    if (!selectedStudent) return;
-    processResultsMutation.mutate({
-      studentId: selectedStudent.id,
-      newStatus: status,
+  // Clear class sheet - remove students from class and notify parents
+  const handleClearSheet = async (grade: string, stream: string, sheetStudents: Student[]) => {
+    if (!user) return;
+    
+    for (const student of sheetStudents) {
+      await supabase
+        .from('students')
+        .update({ class_stream: null, current_grade: null, status: 'pending' as const })
+        .eq('id', student.id);
+
+      await supabase
+        .from('applications')
+        .update({ status: 'archived' })
+        .eq('student_id', student.id)
+        .eq('school_id', schoolId);
+
+      await sendSystemMessage({
+        senderId: user.id,
+        receiverId: student.parent_id,
+        content: `📢 New academic year update! ${student.name} has been cleared from ${grade} Class ${stream}. Please go to Student Hub → Re-register for the new year.`,
+      });
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['school-students'] });
+    queryClient.invalidateQueries({ queryKey: ['gov-students'] });
+    queryClient.invalidateQueries({ queryKey: ['school-applications'] });
+
+    toast({
+      title: 'Class cleared for new year',
+      description: `${sheetStudents.length} student(s) cleared from ${grade} Class ${stream}. Parents have been notified to re-register.`,
     });
+  };
+
+  // Export class sheet as PDF (simple printable format)
+  const handleExportSheet = (grade: string, stream: string, sheetStudents: Student[]) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const rows = sheetStudents.map((s, i) => `
+      <tr>
+        <td style="padding:8px;border:1px solid #ddd;text-align:center">${i + 1}</td>
+        <td style="padding:8px;border:1px solid #ddd;font-family:monospace">${s.student_id_code || '-'}</td>
+        <td style="padding:8px;border:1px solid #ddd;font-weight:500">${s.name}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:center">${stream}</td>
+      </tr>
+    `).join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${grade} Class ${stream} - Student List</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
+          h1 { text-align: center; color: #1a365d; margin-bottom: 5px; }
+          h2 { text-align: center; color: #555; font-weight: normal; margin-top: 0; }
+          .meta { text-align: center; color: #888; margin-bottom: 30px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th { background: #1a365d; color: white; padding: 10px 8px; border: 1px solid #1a365d; text-align: left; }
+          tr:nth-child(even) { background: #f8f9fa; }
+          .footer { text-align: center; margin-top: 30px; color: #888; font-size: 12px; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <h1>${school?.name || 'School'}</h1>
+        <h2>${grade} — Class ${stream}</h2>
+        <p class="meta">Total Students: ${sheetStudents.length} | Generated: ${format(new Date(), 'MMMM d, yyyy')}</p>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px">#</th>
+              <th>Student ID</th>
+              <th>Student Name</th>
+              <th style="width:80px">Class</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <p class="footer">This document is generated from OSR Rwanda Platform</p>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+
+    toast({ title: 'PDF Ready', description: `${grade} Class ${stream} class list opened for printing/saving as PDF.` });
   };
 
   const toggleGrade = (grade: string) => {
     setOpenGrades(prev => {
       const next = new Set(prev);
-      if (next.has(grade)) {
-        next.delete(grade);
-      } else {
-        next.add(grade);
-      }
+      next.has(grade) ? next.delete(grade) : next.add(grade);
       return next;
     });
   };
 
-  const toggleAll = () => {
-    if (openGrades.size === groupedStudents.length) {
-      setOpenGrades(new Set());
-    } else {
-      setOpenGrades(new Set(groupedStudents.map(g => g.grade)));
-    }
+  const toggleStream = (key: string) => {
+    setOpenStreams(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'passed':
-        return (
-          <Badge className="font-semibold border border-emerald-300 bg-emerald-100 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">
-            <CheckCircle className="w-3 h-3 mr-1" />
-            {t('hub.status.passed')}
-          </Badge>
-        );
-      case 'repeat':
-        return <Badge variant="destructive"><RotateCcw className="w-3 h-3 mr-1" />{t('hub.status.repeat')}</Badge>;
-      default:
-        return <Badge variant="outline"><AlertCircle className="w-3 h-3 mr-1" />{t('hub.status.pending')}</Badge>;
-    }
-  };
+  // Group students: grade -> stream -> students
+  const groupedData = React.useMemo(() => {
+    const result: { grade: string; streams: { stream: string; students: Student[] }[] }[] = [];
 
-  // Group students by grade
-  const groupedStudents = React.useMemo(() => {
-    const groups: { grade: string; students: Student[] }[] = [];
-    const gradeMap = new Map<string, Student[]>();
-
-    students.forEach(s => {
-      const grade = s.current_grade || t('school.students.unassigned');
-      if (!gradeMap.has(grade)) gradeMap.set(grade, []);
-      gradeMap.get(grade)!.push(s);
+    allGrades.forEach(grade => {
+      const gradeStudents = students.filter(s => s.current_grade === grade);
+      const streams: { stream: string; students: Student[] }[] = [];
+      classStreams.forEach(stream => {
+        const streamStudents = gradeStudents.filter(s => s.class_stream === stream);
+        streams.push({ stream, students: streamStudents });
+      });
+      result.push({ grade, streams });
     });
+    return result;
+  }, [students]);
 
-    // Sort by predefined grade order
-    const sorted = [...gradeMap.entries()].sort(([a], [b]) => {
-      const idxA = gradeOrder.indexOf(a);
-      const idxB = gradeOrder.indexOf(b);
-      if (idxA === -1 && idxB === -1) return a.localeCompare(b);
-      if (idxA === -1) return 1;
-      if (idxB === -1) return -1;
-      return idxA - idxB;
-    });
-
-    sorted.forEach(([grade, studs]) => groups.push({ grade, students: studs }));
-    return groups;
-  }, [students, t]);
-
-  // Stats
   const totalStudents = students.length;
-  const passedCount = students.filter(s => s.status === 'passed').length;
-  const repeatCount = students.filter(s => s.status === 'repeat').length;
-  const pendingCount = students.filter(s => s.status === 'pending').length;
 
   if (isLoading) {
     return (
@@ -186,222 +221,134 @@ export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-1">
-              <Users className="w-4 h-4" />
-              {t('school.students.total')}
-            </CardDescription>
-            <CardTitle className="text-3xl">{totalStudents}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-1">
-              <GraduationCap className="w-4 h-4" />
-              {t('school.students.passed')}
-            </CardDescription>
-            <CardTitle className="text-3xl text-secondary">{passedCount}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-1">
-              <RotateCcw className="w-4 h-4" />
-              {t('school.students.repeat')}
-            </CardDescription>
-            <CardTitle className="text-3xl text-destructive">{repeatCount}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-1">
-              <ClipboardCheck className="w-4 h-4" />
-              {t('school.students.pending')}
-            </CardDescription>
-            <CardTitle className="text-3xl text-accent-foreground">{pendingCount}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      {/* Single Total Card */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardDescription className="flex items-center gap-1">
+            <Users className="w-4 h-4" />
+            {t('school.students.total')}
+          </CardDescription>
+          <CardTitle className="text-3xl">{totalStudents}</CardTitle>
+        </CardHeader>
+      </Card>
 
-      {/* Grouped by Grade */}
-      {groupedStudents.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>{t('school.students.empty')}</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <div className="flex justify-end">
-            <Button variant="ghost" size="sm" onClick={toggleAll}>
-              {openGrades.size === groupedStudents.length ? t('school.students.collapseAll') : t('school.students.expandAll')}
-            </Button>
-          </div>
+      {/* Class Sheets */}
+      <div className="space-y-3">
+        {groupedData.map(({ grade, streams }) => {
+          const isGradeOpen = openGrades.has(grade);
+          const gradeTotal = streams.reduce((sum, s) => sum + s.students.length, 0);
 
-          {groupedStudents.map(({ grade, students: gradeStudents }) => {
-            const isOpen = openGrades.has(grade);
-            const gradePassed = gradeStudents.filter(s => s.status === 'passed').length;
-            const gradeRepeat = gradeStudents.filter(s => s.status === 'repeat').length;
-            const gradePending = gradeStudents.filter(s => s.status === 'pending').length;
-
-            return (
-              <Collapsible key={grade} open={isOpen} onOpenChange={() => toggleGrade(grade)}>
-                <Card className="overflow-hidden">
-                  <CollapsibleTrigger asChild>
-                    <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {isOpen ? <ChevronDown className="w-5 h-5 text-muted-foreground" /> : <ChevronRight className="w-5 h-5 text-muted-foreground" />}
-                          <div>
-                            <CardTitle className="text-lg">{grade}</CardTitle>
-                            <CardDescription className="mt-0.5">
-                              {gradeStudents.length} {gradeStudents.length === 1 ? t('school.students.studentSingular') : t('school.students.studentPlural')}
-                            </CardDescription>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {gradePassed > 0 && (
-                              <Badge className="font-semibold border border-emerald-300 bg-emerald-100 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">
-                                {gradePassed} {t('hub.status.passed')}
-                              </Badge>
-                          )}
-                          {gradeRepeat > 0 && (
-                            <Badge variant="destructive">{gradeRepeat} {t('hub.status.repeat')}</Badge>
-                          )}
-                          {gradePending > 0 && (
-                            <Badge variant="outline">{gradePending} {t('hub.status.pending')}</Badge>
-                          )}
+          return (
+            <Collapsible key={grade} open={isGradeOpen} onOpenChange={() => toggleGrade(grade)}>
+              <Card className="overflow-hidden">
+                <CollapsibleTrigger asChild>
+                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {isGradeOpen ? <ChevronDown className="w-5 h-5 text-muted-foreground" /> : <ChevronRight className="w-5 h-5 text-muted-foreground" />}
+                        <div>
+                          <CardTitle className="text-lg">{grade}</CardTitle>
+                          <CardDescription>{gradeTotal} {gradeTotal === 1 ? t('school.students.studentSingular') : t('school.students.studentPlural')} · {streams.length} class(es)</CardDescription>
                         </div>
                       </div>
-                    </CardHeader>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <CardContent className="pt-0">
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>{t('school.students.studentId')}</TableHead>
-                              <TableHead>{t('school.table.student')}</TableHead>
-                              <TableHead>{t('school.students.class')}</TableHead>
-                              <TableHead>{t('school.table.status')}</TableHead>
-                              <TableHead className="text-right">{t('school.table.actions')}</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {gradeStudents.map((student) => (
-                              <TableRow key={student.id}>
-                                <TableCell>
-                                  <span className="font-mono text-sm">{student.student_id_code || '-'}</span>
-                                </TableCell>
-                                <TableCell>
-                                  <div>
-                                    <p className="font-medium">{student.name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      DOB: {format(new Date(student.dob), 'MMM d, yyyy')}
-                                    </p>
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="pt-0 space-y-3">
+                    {streams.map(({ stream, students: streamStudents }) => {
+                      const streamKey = `${grade}-${stream}`;
+                      const isStreamOpen = openStreams.has(streamKey);
+
+                      return (
+                        <Collapsible key={streamKey} open={isStreamOpen} onOpenChange={() => toggleStream(streamKey)}>
+                          <div className="border rounded-lg">
+                            <CollapsibleTrigger asChild>
+                              <div className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 transition-colors">
+                                <div className="flex items-center gap-2">
+                                  {isStreamOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                  <span className="font-medium">Class {stream}</span>
+                                  <Badge variant="secondary" className="text-foreground">{streamStudents.length} / 50</Badge>
+                                </div>
+                                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                  {streamStudents.length > 0 && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleExportSheet(grade, stream, streamStudents)}
+                                      >
+                                        <FileText className="w-4 h-4 mr-1" />
+                                        Export PDF
+                                      </Button>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              className="border-osr-warning bg-osr-warning/15 text-foreground hover:bg-osr-warning/25"
+                                              onClick={() => handleClearSheet(grade, stream, streamStudents)}
+                                            >
+                                              <Trash2 className="w-4 h-4 mr-1" />
+                                              Clear & Notify
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>Clear this class for the new academic year and notify parents.</TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="border-t overflow-x-auto">
+                                {streamStudents.length === 0 ? (
+                                  <div className="p-4 text-center text-muted-foreground text-sm">
+                                    No students in this class yet
                                   </div>
-                                </TableCell>
-                                <TableCell>
-                                  {student.class_stream ? `${t('school.approval.class')} ${student.class_stream}` : '-'}
-                                </TableCell>
-                                <TableCell>{getStatusBadge(student.status)}</TableCell>
-                                <TableCell className="text-right">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setSelectedStudent(student);
-                                      setProcessDialog(true);
-                                    }}
-                                  >
-                                    <ClipboardCheck className="w-4 h-4 mr-1" />
-                                    {t('school.students.processResults')}
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </CardContent>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Process Results Dialog */}
-      <Dialog open={processDialog} onOpenChange={setProcessDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('school.students.processResultsTitle')}</DialogTitle>
-            <DialogDescription>
-              {t('school.students.processResultsDesc')} {selectedStudent?.name}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedStudent && (
-            <div className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">{t('school.students.currentGrade')}:</span>
-                    <span className="ml-2 font-medium">{selectedStudent.current_grade}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">{t('school.students.class')}:</span>
-                    <span className="ml-2 font-medium">{selectedStudent.class_stream}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">{t('school.students.currentStatus')}:</span>
-                    <span className="ml-2">{getStatusBadge(selectedStudent.status)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Button
-                  size="lg"
-                  className="h-24 flex-col gap-2"
-                  variant={selectedStudent.status === 'passed' ? 'default' : 'outline'}
-                  onClick={() => handleProcessResult('passed')}
-                  disabled={processResultsMutation.isPending}
-                >
-                  <CheckCircle className="w-8 h-8" />
-                  <span>{t('school.students.markPassed')}</span>
-                  <span className="text-xs opacity-70">{t('school.students.passedNote')}</span>
-                </Button>
-                <Button
-                  size="lg"
-                  className="h-24 flex-col gap-2"
-                  variant={selectedStudent.status === 'repeat' ? 'destructive' : 'outline'}
-                  onClick={() => handleProcessResult('repeat')}
-                  disabled={processResultsMutation.isPending}
-                >
-                  <RotateCcw className="w-8 h-8" />
-                  <span>{t('school.students.markRepeat')}</span>
-                  <span className="text-xs opacity-70">{t('school.students.repeatNote')}</span>
-                </Button>
-              </div>
-
-              <div className="p-3 bg-accent/10 border border-accent/30 rounded-lg">
-                <p className="text-sm text-accent-foreground">
-                  <strong>{t('school.students.note')}:</strong> {t('school.students.newYearNote')}
-                </p>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setProcessDialog(false)}>
-              {t('common.cancel')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                                ) : (
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>#</TableHead>
+                                        <TableHead>{t('school.students.studentId')}</TableHead>
+                                        <TableHead>{t('school.table.student')}</TableHead>
+                                        <TableHead>{t('school.students.class')}</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {streamStudents.map((student, idx) => (
+                                        <TableRow key={student.id}>
+                                          <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                                          <TableCell>
+                                            <span className="font-mono text-sm">{student.student_id_code || '-'}</span>
+                                          </TableCell>
+                                          <TableCell>
+                                            <div>
+                                              <p className="font-medium">{student.name}</p>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell>{stream}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                )}
+                              </div>
+                            </CollapsibleContent>
+                          </div>
+                        </Collapsible>
+                      );
+                    })}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -74,17 +74,57 @@ export type Database = {
           },
         ]
       }
+      messages: {
+        Row: {
+          application_id: string | null
+          content: string
+          created_at: string
+          id: string
+          is_read: boolean
+          is_system: boolean
+          receiver_id: string
+          sender_id: string
+        }
+        Insert: {
+          application_id?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          is_system?: boolean
+          receiver_id: string
+          sender_id: string
+        }
+        Update: {
+          application_id?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          is_system?: boolean
+          receiver_id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount: number
           created_at: string
           currency: string
           description: string | null
-          flutterwave_tx_id: string | null
-          flutterwave_tx_ref: string
           id: string
           parent_id: string
           payment_method: string | null
+          proof_payment_url: string | null
           school_id: string
           status: string
           student_id: string
@@ -95,11 +135,10 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
-          flutterwave_tx_id?: string | null
-          flutterwave_tx_ref: string
           id?: string
           parent_id: string
           payment_method?: string | null
+          proof_payment_url?: string | null
           school_id: string
           status?: string
           student_id: string
@@ -110,11 +149,10 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
-          flutterwave_tx_id?: string | null
-          flutterwave_tx_ref?: string
           id?: string
           parent_id?: string
           payment_method?: string | null
+          proof_payment_url?: string | null
           school_id?: string
           status?: string
           student_id?: string
@@ -168,6 +206,7 @@ export type Database = {
         Row: {
           admin_id: string | null
           created_at: string
+          description: string | null
           district: string
           id: string
           is_approved: boolean
@@ -177,12 +216,14 @@ export type Database = {
           qualifications: string | null
           requirements_pdf_url: string | null
           sector: string
+          showcase_image_url: string | null
           staff_name: string | null
           updated_at: string
         }
         Insert: {
           admin_id?: string | null
           created_at?: string
+          description?: string | null
           district: string
           id?: string
           is_approved?: boolean
@@ -192,12 +233,14 @@ export type Database = {
           qualifications?: string | null
           requirements_pdf_url?: string | null
           sector: string
+          showcase_image_url?: string | null
           staff_name?: string | null
           updated_at?: string
         }
         Update: {
           admin_id?: string | null
           created_at?: string
+          description?: string | null
           district?: string
           id?: string
           is_approved?: boolean
@@ -207,6 +250,7 @@ export type Database = {
           qualifications?: string | null
           requirements_pdf_url?: string | null
           sector?: string
+          showcase_image_url?: string | null
           staff_name?: string | null
           updated_at?: string
         }
@@ -219,10 +263,14 @@ export type Database = {
           current_grade: string | null
           dob: string
           father_name: string | null
+          father_phone: string | null
           id: string
           mother_name: string | null
+          mother_phone: string | null
           name: string
+          parent_email: string | null
           parent_id: string
+          parent_phone: string | null
           school_id: string | null
           status: Database["public"]["Enums"]["student_status"]
           student_id_code: string | null
@@ -234,10 +282,14 @@ export type Database = {
           current_grade?: string | null
           dob: string
           father_name?: string | null
+          father_phone?: string | null
           id?: string
           mother_name?: string | null
+          mother_phone?: string | null
           name: string
+          parent_email?: string | null
           parent_id: string
+          parent_phone?: string | null
           school_id?: string | null
           status?: Database["public"]["Enums"]["student_status"]
           student_id_code?: string | null
@@ -249,10 +301,14 @@ export type Database = {
           current_grade?: string | null
           dob?: string
           father_name?: string | null
+          father_phone?: string | null
           id?: string
           mother_name?: string | null
+          mother_phone?: string | null
           name?: string
+          parent_email?: string | null
           parent_id?: string
+          parent_phone?: string | null
           school_id?: string | null
           status?: Database["public"]["Enums"]["student_status"]
           student_id_code?: string | null
@@ -294,26 +350,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      assign_user_role: {
-        Args: {
-          p_role: string
-          p_user_id: string
-        }
-        Returns: undefined
-      }
-      create_school_for_admin: {
-        Args: {
-          p_admin_id: string
-          p_district: string
-          p_is_approved?: boolean
-          p_name: string
-          p_province: string
-          p_qualifications: string | null
-          p_sector: string
-          p_staff_name: string
-        }
-        Returns: string
-      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -325,7 +361,7 @@ export type Database = {
     Enums: {
       app_role: "parent" | "school_admin"
       application_type: "new" | "transfer"
-      student_status: "pending" | "passed" | "repeat"
+      student_status: "pending" | "passed" | "repeat" | "enrolled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -455,7 +491,7 @@ export const Constants = {
     Enums: {
       app_role: ["parent", "school_admin"],
       application_type: ["new", "transfer"],
-      student_status: ["pending", "passed", "repeat"],
+      student_status: ["pending", "passed", "repeat", "enrolled"],
     },
   },
 } as const

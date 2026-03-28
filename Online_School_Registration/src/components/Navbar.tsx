@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,8 +8,11 @@ import { Menu, X, GraduationCap, Globe } from 'lucide-react';
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const { language, setLanguage, t } = useLanguage();
-  const { user, signOut } = useAuth();
+  const { user, signOut, userRole } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const isParentDashboard = location.pathname === '/parent';
 
   const handleSignOut = async () => {
     await signOut();
@@ -18,6 +21,14 @@ export function Navbar() {
 
   const toggleLanguage = () => {
     setLanguage(language === 'en' ? 'rw' : 'en');
+  };
+
+  const handleNavClick = (hash: string) => {
+    if (isParentDashboard) {
+      // Navigate to home page with hash
+      navigate('/' + hash);
+    }
+    setIsOpen(false);
   };
 
   return (
@@ -37,22 +48,30 @@ export function Navbar() {
             <Link to="/" className="text-foreground/80 hover:text-primary transition-colors font-medium">
               {t('nav.home')}
             </Link>
-            <a href="#about" className="text-foreground/80 hover:text-primary transition-colors font-medium">
-              {t('nav.about')}
-            </a>
-            <a href="#schools" className="text-foreground/80 hover:text-primary transition-colors font-medium">
-              {t('nav.schools')}
-            </a>
+            {isParentDashboard ? (
+              <>
+                <Link to="/#about" className="text-foreground/80 hover:text-primary transition-colors font-medium">
+                  {t('nav.about')}
+                </Link>
+                <Link to="/#schools" className="text-foreground/80 hover:text-primary transition-colors font-medium">
+                  {t('nav.schools')}
+                </Link>
+              </>
+            ) : (
+              <>
+                <a href="#about" className="text-foreground/80 hover:text-primary transition-colors font-medium">
+                  {t('nav.about')}
+                </a>
+                <a href="#schools" className="text-foreground/80 hover:text-primary transition-colors font-medium">
+                  {t('nav.schools')}
+                </a>
+              </>
+            )}
           </div>
 
           {/* Actions */}
           <div className="hidden md:flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleLanguage}
-              className="flex items-center gap-1"
-            >
+            <Button variant="ghost" size="sm" onClick={toggleLanguage} className="flex items-center gap-1">
               <Globe className="w-4 h-4" />
               {language === 'en' ? 'RW' : 'EN'}
             </Button>
@@ -60,7 +79,7 @@ export function Navbar() {
             {user ? (
               <>
                 <Button variant="ghost" size="sm" asChild>
-                  <Link to="/parent">{t('nav.dashboard')}</Link>
+                  <Link to={userRole === 'parent' ? '/parent' : '/school/dashboard'}>{t('nav.dashboard')}</Link>
                 </Button>
                 <Button variant="ghost" size="sm" onClick={handleSignOut}>
                   {t('nav.signout')}
@@ -79,10 +98,7 @@ export function Navbar() {
           </div>
 
           {/* Mobile menu button */}
-          <button
-            className="md:hidden p-2 text-foreground"
-            onClick={() => setIsOpen(!isOpen)}
-          >
+          <button className="md:hidden p-2 text-foreground" onClick={() => setIsOpen(!isOpen)}>
             {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
@@ -91,41 +107,37 @@ export function Navbar() {
         {isOpen && (
           <div className="md:hidden py-4 border-t border-border/50 animate-fade-in">
             <div className="flex flex-col gap-3">
-              <Link
-                to="/"
-                className="px-3 py-2 text-foreground/80 hover:text-primary transition-colors"
-                onClick={() => setIsOpen(false)}
-              >
+              <Link to="/" className="px-3 py-2 text-foreground/80 hover:text-primary transition-colors" onClick={() => setIsOpen(false)}>
                 {t('nav.home')}
               </Link>
-              <a
-                href="#about"
-                className="px-3 py-2 text-foreground/80 hover:text-primary transition-colors"
-                onClick={() => setIsOpen(false)}
-              >
-                {t('nav.about')}
-              </a>
-              <a
-                href="#schools"
-                className="px-3 py-2 text-foreground/80 hover:text-primary transition-colors"
-                onClick={() => setIsOpen(false)}
-              >
-                {t('nav.schools')}
-              </a>
+              {isParentDashboard ? (
+                <>
+                  <Link to="/#about" className="px-3 py-2 text-foreground/80 hover:text-primary transition-colors" onClick={() => setIsOpen(false)}>
+                    {t('nav.about')}
+                  </Link>
+                  <Link to="/#schools" className="px-3 py-2 text-foreground/80 hover:text-primary transition-colors" onClick={() => setIsOpen(false)}>
+                    {t('nav.schools')}
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <a href="#about" className="px-3 py-2 text-foreground/80 hover:text-primary transition-colors" onClick={() => setIsOpen(false)}>
+                    {t('nav.about')}
+                  </a>
+                  <a href="#schools" className="px-3 py-2 text-foreground/80 hover:text-primary transition-colors" onClick={() => setIsOpen(false)}>
+                    {t('nav.schools')}
+                  </a>
+                </>
+              )}
               <div className="flex items-center gap-3 px-3 pt-3 border-t border-border/50">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleLanguage}
-                  className="flex items-center gap-1"
-                >
+                <Button variant="ghost" size="sm" onClick={toggleLanguage} className="flex items-center gap-1">
                   <Globe className="w-4 h-4" />
                   {language === 'en' ? 'RW' : 'EN'}
                 </Button>
                 {user ? (
                   <>
                     <Button variant="ghost" size="sm" asChild>
-                      <Link to="/parent">{t('nav.dashboard')}</Link>
+                      <Link to={userRole === 'parent' ? '/parent' : '/school/dashboard'}>{t('nav.dashboard')}</Link>
                     </Button>
                     <Button variant="ghost" size="sm" onClick={handleSignOut}>
                       {t('nav.signout')}

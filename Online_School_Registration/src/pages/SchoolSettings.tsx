@@ -7,15 +7,7 @@ import { SchoolSidebar } from '@/components/school/SchoolSidebar';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { 
-  Loader2, 
-  Upload, 
-  Building2, 
-  MapPin, 
-  User, 
-  GraduationCap,
-  Save,
-  CheckCircle2,
-  FileText
+  Loader2, Upload, Building2, MapPin, User, GraduationCap, Save, FileText, X, Image as ImageIcon
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,19 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { provinces, getDistrictsForProvince, getSectorsForDistrict } from '@/data/rwanda-locations';
-
-type SchoolSettingsRecord = {
-  name: string | null;
-  staff_name: string | null;
-  qualifications: string | null;
-  province: string | null;
-  district: string | null;
-  sector: string | null;
-  logo_url: string | null;
-  requirements_pdf_url?: string | null;
-  flutterwave_payout_mobile_network?: string | null;
-  flutterwave_payout_mobile_number?: string | null;
-};
+import { DocumentUpload } from '@/components/ui/DocumentUpload';
+import { splitStoredReferences } from '@/lib/document-access';
 
 const SchoolSettings = () => {
   const { user, loading: authLoading, userRole } = useAuth();
@@ -45,7 +26,6 @@ const SchoolSettings = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Form state
   const [schoolName, setSchoolName] = useState('');
   const [staffName, setStaffName] = useState('');
   const [staffRole, setStaffRole] = useState('');
@@ -53,14 +33,14 @@ const SchoolSettings = () => {
   const [province, setProvince] = useState('');
   const [district, setDistrict] = useState('');
   const [sector, setSector] = useState('');
+  const [description, setDescription] = useState('');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [currentPdfUrl, setCurrentPdfUrl] = useState<string | null>(null);
-  const [payoutNetwork, setPayoutNetwork] = useState('');
-  const [payoutPhoneNumber, setPayoutPhoneNumber] = useState('');
+  const [showcaseFile, setShowcaseFile] = useState<File | null>(null);
+  const [showcasePreview, setShowcasePreview] = useState<string | null>(null);
+  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
+  const [existingPdfPaths, setExistingPdfPaths] = useState<string[]>([]);
 
-  // Fetch school data
   const { data: school, isLoading: schoolLoading } = useQuery({
     queryKey: ['my-school', user?.id],
     queryFn: async () => {
@@ -76,65 +56,62 @@ const SchoolSettings = () => {
     enabled: !!user,
   });
 
-  // Populate form when school data loads
   useEffect(() => {
     if (school) {
-      const schoolData = school as unknown as SchoolSettingsRecord;
-      setSchoolName(schoolData.name || '');
-      setStaffName(schoolData.staff_name || '');
-      setQualifications(schoolData.qualifications || '');
-      setProvince(schoolData.province || '');
-      setDistrict(schoolData.district || '');
-      setSector(schoolData.sector || '');
-      setLogoPreview(schoolData.logo_url || null);
-      setCurrentPdfUrl(schoolData.requirements_pdf_url || null);
-      setPayoutNetwork(schoolData.flutterwave_payout_mobile_network || '');
-      setPayoutPhoneNumber(schoolData.flutterwave_payout_mobile_number || '');
+      setSchoolName(school.name || '');
+      setStaffName(school.staff_name || '');
+      setQualifications(school.qualifications || '');
+      setProvince(school.province || '');
+      setDistrict(school.district || '');
+      setSector(school.sector || '');
+      setDescription(school.description || '');
+      setLogoPreview(school.logo_url || null);
+      setShowcasePreview(school.showcase_image_url || null);
+      setExistingPdfPaths(splitStoredReferences(school.requirements_pdf_url));
     }
   }, [school]);
 
-  // Update mutation
   const updateMutation = useMutation({
     mutationFn: async () => {
       if (!school) return;
 
       let logoUrl = school.logo_url;
-
-      // Upload new logo if provided
       if (logoFile) {
         const fileExt = logoFile.name.split('.').pop();
         const fileName = `${school.id}.${fileExt}`;
-        
         const { error: uploadError } = await supabase.storage
           .from('school-logos')
           .upload(fileName, logoFile, { upsert: true });
-
         if (uploadError) throw uploadError;
-
-        const { data } = supabase.storage
-          .from('school-logos')
-          .getPublicUrl(fileName);
-        
+        const { data } = supabase.storage.from('school-logos').getPublicUrl(fileName);
         logoUrl = data.publicUrl;
       }
 
-      // Upload requirements PDF if provided
-      let requirementsPdfUrl = (school as unknown as SchoolSettingsRecord).requirements_pdf_url;
-      if (pdfFile) {
-        const pdfFileName = `${school.id}-requirements.pdf`;
-        
+      let showcaseUrl = school.showcase_image_url;
+      if (showcaseFile) {
+        const fileExt = showcaseFile.name.split('.').pop();
+        const fileName = `${school.id}-showcase.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('school-logos')
+          .upload(fileName, showcaseFile, { upsert: true });
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from('school-logos').getPublicUrl(fileName);
+        showcaseUrl = data.publicUrl;
+      }
+
+      // Upload new PDF files
+      const newPaths: string[] = [];
+      for (const pdfFile of pdfFiles) {
+        const pdfFileName = `${school.id}/${Date.now()}-${pdfFile.name}`;
         const { error: pdfUploadError } = await supabase.storage
           .from('school-documents')
-          .upload(pdfFileName, pdfFile, { upsert: true });
-
+          .upload(pdfFileName, pdfFile);
         if (pdfUploadError) throw pdfUploadError;
-
-        const { data: pdfData } = supabase.storage
-          .from('school-documents')
-          .getPublicUrl(pdfFileName);
-        
-        requirementsPdfUrl = pdfData.publicUrl;
+        newPaths.push(pdfFileName);
       }
+
+      const allPdfPaths = [...existingPdfPaths, ...newPaths];
+      const requirementsPdfUrl = allPdfPaths.length > 0 ? allPdfPaths.join(', ') : null;
 
       const { error } = await supabase
         .from('schools')
@@ -147,62 +124,28 @@ const SchoolSettings = () => {
           sector,
           logo_url: logoUrl,
           requirements_pdf_url: requirementsPdfUrl,
-          flutterwave_payout_mobile_network: payoutNetwork || null,
-          flutterwave_payout_mobile_number:
-            payoutPhoneNumber.replace(/\D/g, '').replace(/^0+/, '') || null,
-        } as any)
+          description: description || null,
+          showcase_image_url: showcaseUrl,
+        })
         .eq('id', school.id);
 
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-school'] });
-      toast({
-        title: t('school.settings.saved'),
-        description: t('school.settings.savedDesc'),
-      });
+      setPdfFiles([]);
+      toast({ title: t('school.settings.saved'), description: t('school.settings.savedDesc') });
     },
     onError: (error) => {
-      toast({
-        title: t('common.error'),
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: t('common.error'), description: error.message, variant: 'destructive' });
     },
   });
-
-  const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        toast({
-          title: t('common.error'),
-          description: 'PDF must be less than 10MB',
-          variant: 'destructive',
-        });
-        return;
-      }
-      if (file.type !== 'application/pdf') {
-        toast({
-          title: t('common.error'),
-          description: 'Only PDF files are allowed',
-          variant: 'destructive',
-        });
-        return;
-      }
-      setPdfFile(file);
-    }
-  };
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
-        toast({
-          title: t('common.error'),
-          description: t('auth.logoTooLarge'),
-          variant: 'destructive',
-        });
+        toast({ title: t('common.error'), description: t('auth.logoTooLarge'), variant: 'destructive' });
         return;
       }
       setLogoFile(file);
@@ -210,51 +153,36 @@ const SchoolSettings = () => {
     }
   };
 
-  const handleProvinceChange = (value: string) => {
-    setProvince(value);
-    setDistrict('');
-    setSector('');
+  const handleShowcaseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast({ title: t('common.error'), description: 'Image must be less than 5MB', variant: 'destructive' });
+        return;
+      }
+      setShowcaseFile(file);
+      setShowcasePreview(URL.createObjectURL(file));
+    }
   };
 
-  const handleDistrictChange = (value: string) => {
-    setDistrict(value);
-    setSector('');
+  const removeExistingPdf = (index: number) => {
+    setExistingPdfPaths(prev => prev.filter((_, i) => i !== index));
   };
+
+  const handleProvinceChange = (value: string) => { setProvince(value); setDistrict(''); setSector(''); };
+  const handleDistrictChange = (value: string) => { setDistrict(value); setSector(''); };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if ((payoutNetwork && !payoutPhoneNumber) || (!payoutNetwork && payoutPhoneNumber)) {
-      toast({
-        title: t('common.error'),
-        description: 'Please provide both payout network and mobile number.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     updateMutation.mutate();
   };
 
   if (authLoading || schoolLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
-
-  if (!user) {
-    return <Navigate to="/auth" replace />;
-  }
-
-  if (userRole !== 'school_admin') {
-    return <Navigate to="/" replace />;
-  }
-
-  if (!school) {
-    return <Navigate to="/school/register" replace />;
-  }
+  if (!user) return <Navigate to="/auth" replace />;
+  if (userRole !== 'school_admin') return <Navigate to="/" replace />;
+  if (!school) return <Navigate to="/school/register" replace />;
 
   const availableDistricts = province ? getDistrictsForProvince(province) : [];
   const availableSectors = district ? getSectorsForDistrict(district) : [];
@@ -264,34 +192,20 @@ const SchoolSettings = () => {
       <div className="min-h-screen flex w-full bg-gradient-to-br from-secondary/30 via-background to-background">
         <SchoolSidebar school={school} />
         <main className="flex-1 p-6 lg:p-8 overflow-auto">
-          {/* Decorative background */}
-          <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-            <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl" />
-            <div className="absolute top-1/2 -left-20 w-60 h-60 bg-accent/5 rounded-full blur-3xl" />
-          </div>
-
           <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
-            {/* Header */}
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary to-primary/80 p-6 lg:p-8 text-primary-foreground shadow-xl">
-              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-50" />
               <div className="relative">
-                <h1 className="text-3xl lg:text-4xl font-display font-bold tracking-tight">
-                  {t('school.settings.title')}
-                </h1>
-                <p className="text-primary-foreground/80 mt-1 text-lg">
-                  {t('school.settings.subtitle')}
-                </p>
+                <h1 className="text-3xl lg:text-4xl font-display font-bold tracking-tight">{t('school.settings.title')}</h1>
+                <p className="text-primary-foreground/80 mt-1 text-lg">{t('school.settings.subtitle')}</p>
               </div>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* School Logo Card */}
+              {/* School Logo */}
               <Card className="border-0 shadow-xl overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-muted/50 to-muted/30 border-b">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <Upload className="w-5 h-5 text-primary" />
-                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Upload className="w-5 h-5 text-primary" /></div>
                     <div>
                       <CardTitle className="text-lg font-display">{t('school.settings.logo')}</CardTitle>
                       <CardDescription>{t('school.settings.logoDesc')}</CardDescription>
@@ -314,26 +228,18 @@ const SchoolSettings = () => {
                           <p className="text-sm font-medium text-primary">{t('auth.uploadLogo')}</p>
                           <p className="text-xs text-muted-foreground mt-1">{t('auth.logoHint')}</p>
                         </div>
-                        <Input
-                          id="logo"
-                          type="file"
-                          accept="image/*"
-                          onChange={handleLogoChange}
-                          className="hidden"
-                        />
+                        <Input id="logo" type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
                       </Label>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* School Information Card */}
+              {/* School Information */}
               <Card className="border-0 shadow-xl overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-muted/50 to-muted/30 border-b">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <Building2 className="w-5 h-5 text-primary" />
-                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Building2 className="w-5 h-5 text-primary" /></div>
                     <div>
                       <CardTitle className="text-lg font-display">{t('school.settings.info')}</CardTitle>
                       <CardDescription>{t('school.settings.infoDesc')}</CardDescription>
@@ -343,25 +249,51 @@ const SchoolSettings = () => {
                 <CardContent className="p-6 space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="schoolName">{t('auth.schoolName')}</Label>
-                    <Input
-                      id="schoolName"
-                      value={schoolName}
-                      onChange={(e) => setSchoolName(e.target.value)}
-                      placeholder={t('auth.schoolNamePlaceholder')}
-                      className="h-12"
-                      required
-                    />
+                    <Input id="schoolName" value={schoolName} onChange={(e) => setSchoolName(e.target.value)} placeholder={t('auth.schoolNamePlaceholder')} className="h-12" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">School Description</Label>
+                    <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Briefly describe your school, its mission, and what makes it unique..." rows={4} />
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Staff Information Card */}
+              {/* Showcase Image */}
               <Card className="border-0 shadow-xl overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-muted/50 to-muted/30 border-b">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-                      <User className="w-5 h-5 text-accent" />
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><ImageIcon className="w-5 h-5 text-primary" /></div>
+                    <div>
+                      <CardTitle className="text-lg font-display">Showcase Image</CardTitle>
+                      <CardDescription>Upload a photo that represents your school (displayed on your profile)</CardDescription>
                     </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-6">
+                  {showcasePreview && (
+                    <div className="relative mb-4 rounded-xl overflow-hidden border">
+                      <img src={showcasePreview} alt="Showcase" className="w-full h-48 object-cover" />
+                      <Button type="button" variant="destructive" size="sm" className="absolute top-2 right-2 h-7 w-7 p-0" onClick={() => { setShowcaseFile(null); setShowcasePreview(null); }}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                  <Label htmlFor="showcase" className="cursor-pointer">
+                    <div className="border-2 border-dashed border-primary/30 rounded-xl p-4 text-center hover:border-primary/50 hover:bg-primary/5 transition-all">
+                      <ImageIcon className="w-6 h-6 mx-auto text-primary/60 mb-2" />
+                      <p className="text-sm font-medium text-primary">Upload Showcase Image</p>
+                      <p className="text-xs text-muted-foreground mt-1">Max 5MB (JPG, PNG)</p>
+                    </div>
+                    <Input id="showcase" type="file" accept="image/*" onChange={handleShowcaseChange} className="hidden" />
+                  </Label>
+                </CardContent>
+              </Card>
+
+              {/* Staff Information */}
+              <Card className="border-0 shadow-xl overflow-hidden">
+                <CardHeader className="bg-gradient-to-r from-muted/50 to-muted/30 border-b">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center"><User className="w-5 h-5 text-accent" /></div>
                     <div>
                       <CardTitle className="text-lg font-display">{t('school.settings.staff')}</CardTitle>
                       <CardDescription>{t('school.settings.staffDesc')}</CardDescription>
@@ -372,45 +304,25 @@ const SchoolSettings = () => {
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="staffName">{t('auth.staffName')}</Label>
-                      <Input
-                        id="staffName"
-                        value={staffName}
-                        onChange={(e) => setStaffName(e.target.value)}
-                        placeholder={t('auth.staffNamePlaceholder')}
-                        className="h-12"
-                      />
+                      <Input id="staffName" value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder={t('auth.staffNamePlaceholder')} className="h-12" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="staffRole">{t('auth.staffRole')}</Label>
-                      <Input
-                        id="staffRole"
-                        value={staffRole}
-                        onChange={(e) => setStaffRole(e.target.value)}
-                        placeholder={t('auth.staffRolePlaceholder')}
-                        className="h-12"
-                      />
+                      <Input id="staffRole" value={staffRole} onChange={(e) => setStaffRole(e.target.value)} placeholder={t('auth.staffRolePlaceholder')} className="h-12" />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="qualifications">{t('auth.qualifications')}</Label>
-                    <Textarea
-                      id="qualifications"
-                      value={qualifications}
-                      onChange={(e) => setQualifications(e.target.value)}
-                      placeholder={t('auth.qualificationsPlaceholder')}
-                      rows={3}
-                    />
+                    <Textarea id="qualifications" value={qualifications} onChange={(e) => setQualifications(e.target.value)} placeholder={t('auth.qualificationsPlaceholder')} rows={3} />
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Location Card */}
+              {/* Location */}
               <Card className="border-0 shadow-xl overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-muted/50 to-muted/30 border-b">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[hsl(var(--osr-sky))]/10 flex items-center justify-center">
-                      <MapPin className="w-5 h-5 text-[hsl(var(--osr-sky))]" />
-                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-[hsl(var(--osr-sky))]/10 flex items-center justify-center"><MapPin className="w-5 h-5 text-[hsl(var(--osr-sky))]" /></div>
                     <div>
                       <CardTitle className="text-lg font-display">{t('school.settings.location')}</CardTitle>
                       <CardDescription>{t('school.settings.locationDesc')}</CardDescription>
@@ -422,39 +334,27 @@ const SchoolSettings = () => {
                     <div className="space-y-2">
                       <Label>{t('auth.province')}</Label>
                       <Select value={province} onValueChange={handleProvinceChange}>
-                        <SelectTrigger className="h-12">
-                          <SelectValue placeholder={t('auth.selectProvince')} />
-                        </SelectTrigger>
+                        <SelectTrigger className="h-12"><SelectValue placeholder={t('auth.selectProvince')} /></SelectTrigger>
                         <SelectContent className="bg-popover z-50">
-                          {provinces.map((p) => (
-                            <SelectItem key={p} value={p}>{p}</SelectItem>
-                          ))}
+                          {provinces.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
                       <Label>{t('auth.district')}</Label>
                       <Select value={district} onValueChange={handleDistrictChange} disabled={!province}>
-                        <SelectTrigger className="h-12">
-                          <SelectValue placeholder={t('auth.selectDistrict')} />
-                        </SelectTrigger>
+                        <SelectTrigger className="h-12"><SelectValue placeholder={t('auth.selectDistrict')} /></SelectTrigger>
                         <SelectContent className="bg-popover z-50">
-                          {availableDistricts.map((d) => (
-                            <SelectItem key={d} value={d}>{d}</SelectItem>
-                          ))}
+                          {availableDistricts.map((d) => (<SelectItem key={d} value={d}>{d}</SelectItem>))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
                       <Label>{t('auth.sector')}</Label>
                       <Select value={sector} onValueChange={setSector} disabled={!district}>
-                        <SelectTrigger className="h-12">
-                          <SelectValue placeholder={t('auth.selectSector')} />
-                        </SelectTrigger>
+                        <SelectTrigger className="h-12"><SelectValue placeholder={t('auth.selectSector')} /></SelectTrigger>
                         <SelectContent className="bg-popover z-50">
-                          {availableSectors.map((s) => (
-                            <SelectItem key={s} value={s}>{s}</SelectItem>
-                          ))}
+                          {availableSectors.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -462,115 +362,59 @@ const SchoolSettings = () => {
                 </CardContent>
               </Card>
 
-              {/* Requirements PDF Card */}
+              {/* Requirements Documents */}
               <Card className="border-0 shadow-xl overflow-hidden">
                 <CardHeader className="bg-gradient-to-r from-muted/50 to-muted/30 border-b">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-primary" />
-                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><FileText className="w-5 h-5 text-primary" /></div>
                     <div>
                       <CardTitle className="text-lg font-display">{t('school.settings.requirements')}</CardTitle>
-                      <CardDescription>{t('school.settings.requirementsDesc')}</CardDescription>
+                      <CardDescription>Upload admission requirement documents (PDF, max 10MB each)</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-6 space-y-4">
-                  {currentPdfUrl && !pdfFile && (
-                    <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
-                      <FileText className="w-5 h-5 text-primary" />
-                      <span className="text-sm font-medium flex-1">{t('school.settings.currentPdf')}</span>
-                      <a
-                        href={currentPdfUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-primary hover:underline font-medium"
-                      >
-                        {t('school.settings.viewPdf')}
-                      </a>
+                  {/* Existing uploaded documents */}
+                  {existingPdfPaths.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">Current Documents</p>
+                      {existingPdfPaths.map((path, i) => {
+                        const fileName = path.split('/').pop() || `Document ${i + 1}`;
+                        return (
+                          <div key={i} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-10 h-8 rounded bg-background flex items-center justify-center border text-[10px] font-bold text-red-600">
+                                PDF
+                              </div>
+                              <span className="text-sm truncate">{decodeURIComponent(fileName.replace(/^\d+-/, ''))}</span>
+                            </div>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => removeExistingPdf(i)} className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive flex-shrink-0">
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
-                  <Label htmlFor="requirementsPdf" className="cursor-pointer">
-                    <div className="border-2 border-dashed border-primary/30 rounded-xl p-4 text-center hover:border-primary/50 hover:bg-primary/5 transition-all">
-                      <FileText className="w-6 h-6 mx-auto text-primary/60 mb-2" />
-                      <p className="text-sm font-medium text-primary">
-                        {currentPdfUrl ? t('school.settings.replacePdf') : t('school.settings.uploadPdf')}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">{t('school.settings.pdfHint')}</p>
-                      {pdfFile && (
-                        <p className="text-xs text-primary mt-2 font-medium">✓ {pdfFile.name}</p>
-                      )}
-                    </div>
-                    <Input
-                      id="requirementsPdf"
-                      type="file"
-                      accept="application/pdf"
-                      onChange={handlePdfChange}
-                      className="hidden"
-                    />
-                  </Label>
-                </CardContent>
-              </Card>
 
-              {/* Payout Destination Card */}
-              <Card className="border-0 shadow-xl overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-muted/50 to-muted/30 border-b">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-                      <GraduationCap className="w-5 h-5 text-accent" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-lg font-display">School Payout Destination</CardTitle>
-                      <CardDescription>
-                        Parent fee payments will be transferred to this school mobile money account after verification.
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-6 space-y-4">
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Mobile Money Network</Label>
-                      <Select value={payoutNetwork} onValueChange={setPayoutNetwork}>
-                        <SelectTrigger className="h-12">
-                          <SelectValue placeholder="Select network" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover z-50">
-                          <SelectItem value="MTN">MTN MoMo</SelectItem>
-                          <SelectItem value="AIRTEL">Airtel Money</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Mobile Number (Rwanda)</Label>
-                      <Input
-                        value={payoutPhoneNumber}
-                        onChange={(e) => setPayoutPhoneNumber(e.target.value)}
-                        placeholder="e.g. 078xxxxxxx"
-                        className="h-12"
-                      />
-                    </div>
-                  </div>
+                  <DocumentUpload
+                    files={pdfFiles}
+                    onFilesChange={setPdfFiles}
+                    accept=".pdf"
+                    multiple={true}
+                    label="Upload Requirements"
+                    hint="PDF files, max 10MB each"
+                    maxSizeMB={10}
+                  />
                 </CardContent>
               </Card>
 
               <div className="flex justify-end">
-                <Button 
-                  type="submit" 
-                  size="lg"
-                  disabled={updateMutation.isPending}
-                  className="px-8 h-12 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
-                >
+                <Button type="submit" size="lg" disabled={updateMutation.isPending} className="px-8 h-12 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg">
                   {updateMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      {t('common.saving')}
-                    </>
+                    <><Loader2 className="w-5 h-5 mr-2 animate-spin" />{t('common.saving')}</>
                   ) : (
-                    <>
-                      <Save className="w-5 h-5 mr-2" />
-                      {t('school.settings.saveChanges')}
-                    </>
+                    <><Save className="w-5 h-5 mr-2" />{t('school.settings.saveChanges')}</>
                   )}
                 </Button>
               </div>

@@ -33,7 +33,7 @@ export function HeroSection() {
           <div className="flex flex-col sm:flex-row gap-4">
             <Button
               size="lg"
-              className="btn-hero-outline group"
+              className="bg-white text-primary hover:bg-white/90 hover:text-primary group"
               asChild
             >
               <Link to="/auth?mode=signup&role=parent">
@@ -45,7 +45,7 @@ export function HeroSection() {
             <Button
               size="lg"
               variant="secondary"
-              className="group"
+              className="bg-secondary text-secondary-foreground hover:bg-secondary/90 group"
               asChild
             >
               <Link to="/auth?mode=signup&role=school">

@@ -1,5 +1,4 @@
-import { createContext, useContext, useState } from 'react';
-import type { ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 type Language = 'en' | 'rw';
 
@@ -35,8 +34,8 @@ export const translations: Translations = {
   'about.feature2.desc': { en: 'Browse and filter schools by location, grades, and more', rw: 'Shakisha kandi uhitemo amashuri ukurikije ahantu, amasomo, n\'ibindi' },
   'about.feature3.title': { en: 'Track Applications', rw: 'Kurikirana Inyandiko' },
   'about.feature3.desc': { en: 'Monitor your application status in real-time', rw: 'Kurikirana uko inyandiko zawe zihagaze mu gihe nyacyo' },
-  'about.feature4.title': { en: 'Secure Payments', rw: 'Kwishyura Bwizewe' },
-  'about.feature4.desc': { en: 'Pay registration fees securely via Mobile Money', rw: 'Ishyura amafaranga y\'iyandikisha ufite umutekano binyuze muri Mobile Money' },
+  'about.feature4.title': { en: 'Upload Payment Proof', rw: 'Shyiraho Icyemezo cy\'Ubwishyu' },
+  'about.feature4.desc': { en: 'Upload your payment proof online without visiting the school in person', rw: 'Shyiraho icyemezo cy\'ubwishyu kuri interineti utajya ku ishuri' },
   
   // School Discovery
   'schools.title': { en: 'Find the Perfect School', rw: 'Shakisha Ishuri Rikwiriye' },
@@ -85,8 +84,8 @@ export const translations: Translations = {
   'dashboard.transferStudent': { en: 'Transfer Student', rw: 'Imura Umunyeshuri' },
   'dashboard.transferStudentDesc': { en: 'Move a child to a different school', rw: 'Imura umwana mu ishuri ritandukanye' },
   'dashboard.startTransfer': { en: 'Start Transfer', rw: 'Tangira Kwimura' },
-  'dashboard.payment': { en: 'Submit Payment', rw: 'Ohereza Kwishyura' },
-  'dashboard.paymentDesc': { en: 'Submit MoMo payment proof', rw: 'Ohereza icyemezo cya MoMo' },
+  'dashboard.payment': { en: 'Payment Proof', rw: 'Icyemezo cy\'Ubwishyu' },
+  'dashboard.paymentDesc': { en: 'Upload payment proof for school fees', rw: 'Shyiraho icyemezo cy\'ubwishyu bw\'amafaranga y\'ishuri' },
   'dashboard.submitPayment': { en: 'Submit Payment', rw: 'Ohereza Kwishyura' },
   'dashboard.studentHub': { en: 'Student Hub', rw: 'Ikigo cy\'Abanyeshuri' },
   'dashboard.studentHubDesc': { en: 'View and manage your children', rw: 'Reba kandi ugenzure abana bawe' },
@@ -110,12 +109,20 @@ export const translations: Translations = {
   'register.selectSchool': { en: 'Choose a school', rw: 'Hitamo ishuri' },
   'register.grade': { en: 'Grade/Class', rw: 'Icyiciro/Ishami' },
   'register.selectGrade': { en: 'Select grade', rw: 'Hitamo icyiciro' },
-  'register.transcript': { en: 'Nursery Transcript (Optional)', rw: 'Impapuro z\'Amanota (Ntibisabwa)' },
+  'register.selectSchoolPlaceholder': { en: 'Choose a school', rw: 'Hitamo ishuri' },
+  'register.gradePlaceholder': { en: 'Select grade/class', rw: 'Hitamo icyiciro/ishami' },
+  'register.transcript': { en: 'Upload Transcripts (Optional)', rw: 'Shyiraho Impapuro z\'Amanota (Ntibisabwa)' },
+  'register.motherPhone': { en: "Mother's Phone Number", rw: "Nimero ya Telefoni ya Mama" },
+  'register.fatherPhone': { en: "Father's Phone Number", rw: "Nimero ya Telefoni ya Papa" },
   'register.transcriptHint': { en: 'Upload PDF, JPG, or PNG (max 5MB)', rw: 'Shyiraho PDF, JPG, cyangwa PNG (ntarengwa 5MB)' },
   'register.submit': { en: 'Register Student', rw: 'Andikisha Umunyeshuri' },
   'register.success': { en: 'Registration Successful!', rw: 'Iyandikisha Ryagenze Neza!' },
   'register.successDesc': { en: 'Your child has been registered. Await school approval.', rw: 'Umwana wawe yandikishijwe. Tegereza kwemezwa n\'ishuri.' },
   'register.error': { en: 'Registration Failed', rw: 'Iyandikisha Ryanze' },
+  'register.parentPhone': { en: 'Parent Phone Number', rw: 'Nimero ya Telefoni y\'Umubyeyi' },
+  'register.parentPhonePlaceholder': { en: 'e.g., 0788123456', rw: 'urugero, 0788123456' },
+  'register.parentEmail': { en: 'Parent Email (Optional)', rw: 'Imeyili y\'Umubyeyi (Ntibisabwa)' },
+  'register.parentEmailPlaceholder': { en: 'parent@email.com', rw: 'umubyeyi@email.com' },
   
   // Transfer Form
   'transfer.title': { en: 'Transfer Student', rw: 'Imura Umunyeshuri' },
@@ -138,8 +145,10 @@ export const translations: Translations = {
   
   // Payment Form
   'payment.title': { en: 'Pay School Fees', rw: 'Ishyura Amafaranga y\'Ishuri' },
-  'payment.description': { en: 'Submit your MTN MoMo payment details', rw: 'Ohereza amakuru y\'ubwishyu bwawe bwa MTN MoMo' },
-  'payment.flutterwaveDesc': { en: 'Pay school fees securely via Mobile Money or Card', rw: 'Ishyura amafaranga y\'ishuri bwizewe binyuze muri Mobile Money cyangwa Ikarita' },
+'payment.description': { en: 'Upload your payment proof', rw: 'Shyiraho icyemezo cy\'ubwishyu bwawe' },
+  'payment.uploadProofDesc': { en: 'Upload proof of payment for your child\'s school fees', rw: 'Shyiraho icyemezo cy\'ubwishyu bw\'amafaranga y\'ishuri ry\'umwana wawe' },
+  'payment.descriptionLabel': { en: 'Description (Optional)', rw: 'Ibisobanuro (Ntibisabwa)' },
+  'payment.descriptionPlaceholder': { en: 'e.g., Term 1 school fees', rw: 'urugero, Amafaranga y\'ishuri igihembwe cya 1' },
   'payment.selectStudent': { en: 'Select Student', rw: 'Hitamo Umunyeshuri' },
   'payment.selectStudentPlaceholder': { en: 'Choose a student to pay for', rw: 'Hitamo umunyeshuri wo kwishyurira' },
   'payment.amount': { en: 'Amount', rw: 'Amafaranga' },
@@ -204,6 +213,11 @@ export const translations: Translations = {
   // Footer
   'footer.rights': { en: 'All rights reserved', rw: 'Uburenganzira bwose bwabikijwe' },
   'footer.contact': { en: 'Contact Us', rw: 'Twandikire' },
+
+  // School Welcome
+  'school.welcome.appCardDesc': { en: 'View and manage all incoming applications', rw: 'Reba kandi ugenzure inyandiko zose zinjira' },
+  'school.welcome.govPortal': { en: 'Government Portal', rw: 'Urwego rw\'Igihugu' },
+  'school.welcome.govPortalDesc': { en: 'Class student lists with IDs for reporting & Excel export', rw: 'Urutonde rw\'abanyeshuri n\'ID ku raporo no gukuramo Excel' },
   
   // Common
   'common.cancel': { en: 'Cancel', rw: 'Hagarika' },
@@ -412,6 +426,93 @@ export const translations: Translations = {
   'auth.uploadLogo': { en: 'Click to upload logo', rw: 'Kanda ushyiremo ikimenyetso' },
   'auth.logoHint': { en: 'PNG, JPG up to 2MB', rw: 'PNG, JPG kugeza 2MB' },
   'auth.logoTooLarge': { en: 'Logo must be less than 2MB', rw: 'Ikimenyetso kigomba kuba munsi ya 2MB' },
+  'auth.schoolDescPlaceholder': { en: 'Briefly describe your school, its mission, and what makes it unique...', rw: 'Sobanura muri make ishuri ryawe, intego yaryo, n\'icyarihariye...' },
+
+  // Chat / Inbox
+  'chat.inbox': { en: 'Inbox', rw: 'Ubutumwa' },
+  'chat.unread': { en: 'unread', rw: 'bitasomwe' },
+  'chat.noMessages': { en: 'No messages yet', rw: 'Nta butumwa buriho' },
+  'chat.typePlaceholder': { en: 'Type a message...', rw: 'Andika ubutumwa...' },
+  'chat.backToInbox': { en: 'Back to Inbox', rw: 'Subira ku Butumwa' },
+  'chat.applicationThread': { en: 'Application thread', rw: 'Ubutumwa bw\'inyandiko' },
+  'dashboard.inbox': { en: 'Messages', rw: 'Ubutumwa' },
+  'dashboard.inboxDesc': { en: 'Chat with school admins about applications & payments', rw: 'Ganira n\'abayobozi b\'amashuri ku nyandiko n\'ubwishyu' },
+  'dashboard.openInbox': { en: 'Open Inbox', rw: 'Fungura Ubutumwa' },
+
+  // Re-registration
+  'rereg.empty': { en: 'No re-registration applications yet.', rw: 'Nta nyandiko zo kongera kwiyandikisha zihari.' },
+  'rereg.studentName': { en: 'Student Name', rw: 'Izina ry\'Umunyeshuri' },
+  'rereg.studentId': { en: 'Student ID', rw: 'ID y\'Umunyeshuri' },
+  'rereg.previousClass': { en: 'Previous Class', rw: 'Ishami rya Mbere' },
+  'rereg.newClass': { en: 'New Class', rw: 'Ishami Rishya' },
+  'rereg.appliedDate': { en: 'Applied Date', rw: 'Itariki Yoherejwe' },
+  'rereg.payment': { en: 'Payment', rw: 'Kwishyura' },
+  'rereg.status': { en: 'Status', rw: 'Uko Bihagaze' },
+  'rereg.actions': { en: 'Actions', rw: 'Ibikorwa' },
+  'rereg.paid': { en: 'Paid', rw: 'Byishyuwe' },
+  'rereg.unpaid': { en: 'Unpaid', rw: 'Ntabyishyuwe' },
+  'rereg.approved': { en: 'Approved', rw: 'Byemejwe' },
+  'rereg.rejected': { en: 'Rejected', rw: 'Byanzwe' },
+  'rereg.pending': { en: 'Pending', rw: 'Bitegereje' },
+  'rereg.approve': { en: 'Approve', rw: 'Emeza' },
+  'rereg.detailsTitle': { en: 'Re-registration Details', rw: 'Ibisobanuro byo Kongera Kwiyandikisha' },
+  'rereg.student': { en: 'Student', rw: 'Umunyeshuri' },
+  'rereg.id': { en: 'ID', rw: 'ID' },
+  'rereg.uploadedTranscripts': { en: 'Uploaded Transcripts', rw: 'Amanota Yashyizwemo' },
+  'rereg.approveTitle': { en: 'Approve Re-registration', rw: 'Emeza Kongera Kwiyandikisha' },
+  'rereg.assignClass': { en: 'Assign Class Stream', rw: 'Shyiraho Ishami' },
+  'rereg.confirm': { en: 'Confirm', rw: 'Emeza' },
+  'rereg.approveSuccess': { en: 'Re-registration Approved', rw: 'Kongera Kwiyandikisha Byemejwe' },
+  'rereg.approveSuccessDesc': { en: 'Student has been assigned to the new class.', rw: 'Umunyeshuri yashyizwe mu ishami rishya.' },
+
+  // Government Portal
+  'gov.republic': { en: 'Republic of Rwanda — Ministry of Education', rw: 'Repubulika y\'u Rwanda — Minisiteri y\'Uburezi' },
+  'gov.studentsAcross': { en: 'students across', rw: 'abanyeshuri mu' },
+  'gov.classes': { en: 'class(es)', rw: 'ishami (amashami)' },
+  'gov.class': { en: 'Class', rw: 'Ishami' },
+  'gov.exportExcel': { en: 'Export Excel', rw: 'Kuramo Excel' },
+  'gov.exportComplete': { en: 'Export Complete', rw: 'Gukuramo Byarangiye' },
+  'gov.exported': { en: 'exported as Excel.', rw: 'byakuwe mu buryo bwa Excel.' },
+  'gov.studentId': { en: 'Student ID', rw: 'ID y\'Umunyeshuri' },
+  'gov.name': { en: 'Name', rw: 'Izina' },
+  'gov.dob': { en: 'DOB', rw: 'Itariki y\'Amavuko' },
+  'gov.mother': { en: 'Mother', rw: 'Mama' },
+  'gov.motherPhone': { en: 'Mother Phone', rw: 'Telefoni ya Mama' },
+  'gov.father': { en: 'Father', rw: 'Papa' },
+  'gov.fatherPhone': { en: 'Father Phone', rw: 'Telefoni ya Papa' },
+  'gov.email': { en: 'Email', rw: 'Imeyili' },
+  'gov.transcripts': { en: 'Transcripts', rw: 'Amanota' },
+  'gov.transcriptError': { en: 'Could not open transcript', rw: 'Ntibishoboka gufungura amanota' },
+
+  // Document Upload
+  'doc.dragDrop': { en: 'Drag & drop files here, or click to browse', rw: 'Kurura dosiye hano, cyangwa ukande ushakishe' },
+  'doc.maxSize': { en: 'max per file', rw: 'ntarengwa kuri dosiye' },
+  'doc.uploadedFiles': { en: 'Uploaded Files', rw: 'Dosiye Zashyizwemo' },
+
+  // Payment updates
+  'payment.proofTitle': { en: 'Payment Proof', rw: 'Icyemezo cy\'Ubwishyu' },
+  'payment.proofDesc': { en: 'Upload proof of payment for your child\'s school fees', rw: 'Shyiraho icyemezo cy\'ubwishyu bw\'amafaranga y\'ishuri ry\'umwana wawe' },
+  'payment.markPaid': { en: 'Mark as Paid', rw: 'Shyiraho Byishyuwe' },
+
+  // School description
+  'auth.school.description': { en: 'School Description', rw: 'Ibisobanuro by\'Ishuri' },
+  'auth.school.descriptionPlaceholder': { en: 'Briefly describe your school...', rw: 'Sobanura mu magambo make ishuri ryawe...' },
+  'school.settings.description': { en: 'School Description', rw: 'Ibisobanuro by\'Ishuri' },
+  'school.settings.descriptionPlaceholder': { en: 'Describe your school...', rw: 'Sobanura ishuri ryawe...' },
+  'school.settings.showcaseImage': { en: 'Showcase Image', rw: 'Ifoto Igaragaza Ishuri' },
+  'school.settings.uploadRequirements': { en: 'Upload Requirements PDF', rw: 'Shyiramo PDF y\'Ibisabwa' },
+  'school.settings.requirementsList': { en: 'Uploaded Requirements', rw: 'Ibisabwa Byashyizwemo' },
+  'school.settings.deleteFile': { en: 'Delete', rw: 'Siba' },
+
+  // Student management
+  'school.students.clearNotify': { en: 'Clear & Notify', rw: 'Gusiba & Kumenyesha' },
+  'school.students.clearNotifyDesc': { en: 'Clear all classes for new year and notify parents to re-register.', rw: 'Gusiba amashami yose ku mwaka mushya no kumenyesha ababyeyi kongera kwiyandikisha.' },
+  'school.students.exportPdf': { en: 'Export PDF', rw: 'Kuramo PDF' },
+
+  // School card
+  'schools.description': { en: 'School Description', rw: 'Ibisobanuro by\'Ishuri' },
+  'schools.viewRequirements': { en: 'View Requirements', rw: 'Reba Ibisabwa' },
+  'schools.downloadRequirementsBtn': { en: 'Download Requirements', rw: 'Kuramo Ibisabwa' },
 };
 
 interface LanguageContextType {

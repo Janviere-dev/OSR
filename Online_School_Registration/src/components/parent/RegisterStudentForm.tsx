@@ -11,14 +11,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Upload, Loader2, X, FileText } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { DocumentUpload } from '@/components/ui/DocumentUpload';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
   dob: z.string().min(1, 'Date of birth is required'),
   motherName: z.string().min(2, 'Mother name must be at least 2 characters').max(100),
   fatherName: z.string().min(2, 'Father name must be at least 2 characters').max(100),
+  motherPhone: z.string().min(10, 'Phone number must be at least 10 digits').max(15),
+  fatherPhone: z.string().min(10, 'Phone number must be at least 10 digits').max(15),
+  parentEmail: z.string().email('Please enter a valid email').max(255).or(z.literal('')),
   schoolId: z.string().min(1, 'Please select a school'),
   currentGrade: z.string().min(1, 'Please select a grade'),
 });
@@ -55,47 +59,18 @@ const RegisterStudentForm = ({ onBack }: RegisterStudentFormProps) => {
       dob: '',
       motherName: '',
       fatherName: '',
+      motherPhone: '',
+      fatherPhone: '',
+      parentEmail: '',
       schoolId: '',
       currentGrade: '',
     },
   });
 
-  const grades = ['Nursery 1', 'Nursery 2', 'Nursery 3', 'Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6'];
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
-
-    const selected = Array.from(e.target.files);
-    const maxSize = 5 * 1024 * 1024;
-    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
-
-    const validFiles = selected.filter((file) => {
-      const validType = allowedTypes.includes(file.type);
-      const validSize = file.size <= maxSize;
-      return validType && validSize;
-    });
-
-    if (validFiles.length !== selected.length) {
-      toast({
-        title: t('register.error'),
-        description: 'Some files were skipped. Only PDF, JPG, PNG up to 5MB are allowed.',
-        variant: 'destructive',
-      });
-    }
-
-    setTranscriptFiles((prev) => {
-      const merged = [...prev, ...validFiles];
-      return merged.filter(
-        (file, index, arr) => arr.findIndex((f) => f.name === file.name && f.size === file.size) === index,
-      );
-    });
-
-    e.target.value = '';
-  };
-
-  const removeTranscriptFile = (indexToRemove: number) => {
-    setTranscriptFiles((prev) => prev.filter((_, index) => index !== indexToRemove));
-  };
+  const grades = [
+    'Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6',
+    'Secondary 1', 'Secondary 2', 'Secondary 3', 'Secondary 4', 'Secondary 5', 'Secondary 6',
+  ];
 
   const onSubmit = async (data: RegisterFormData) => {
     if (!user) return;
@@ -104,28 +79,19 @@ const RegisterStudentForm = ({ onBack }: RegisterStudentFormProps) => {
     try {
       let transcriptsUrl = null;
 
-      // Upload transcripts if provided
       if (transcriptFiles.length > 0) {
-        const uploadedUrls: string[] = [];
-
-        for (const [index, file] of transcriptFiles.entries()) {
-          const fileExt = file.name.split('.').pop();
-          const sanitizedBaseName = file.name.replace(/\.[^/.]+$/, '').replace(/\s+/g, '_');
-          const fileName = `${user.id}/${Date.now()}-${index}-${sanitizedBaseName}.${fileExt}`;
-
+        const uploadedRefs: string[] = [];
+        for (const file of transcriptFiles) {
+          const fileName = `${user.id}/${Date.now()}-${file.name}`;
           const { error: uploadError } = await supabase.storage
             .from('student-documents')
-            .upload(fileName, file, { upsert: false });
-
+            .upload(fileName, file);
           if (uploadError) throw uploadError;
-
-          uploadedUrls.push(fileName);
+          uploadedRefs.push(fileName);
         }
-
-        transcriptsUrl = JSON.stringify(uploadedUrls);
+        transcriptsUrl = uploadedRefs.join(',');
       }
 
-      // Create student record
       const { data: student, error: studentError } = await supabase
         .from('students')
         .insert({
@@ -136,14 +102,17 @@ const RegisterStudentForm = ({ onBack }: RegisterStudentFormProps) => {
           current_grade: data.currentGrade,
           mother_name: data.motherName,
           father_name: data.fatherName,
+          mother_phone: data.motherPhone,
+          father_phone: data.fatherPhone,
+          parent_phone: data.motherPhone,
+          parent_email: data.parentEmail || null,
           status: 'pending',
-        })
+        } as any)
         .select()
         .single();
 
       if (studentError) throw studentError;
 
-      // Create application record
       const { error: appError } = await supabase
         .from('applications')
         .insert({
@@ -160,13 +129,11 @@ const RegisterStudentForm = ({ onBack }: RegisterStudentFormProps) => {
         title: t('register.success'),
         description: t('register.successDesc'),
       });
-
       onBack();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unexpected error';
+    } catch (error: any) {
       toast({
         title: t('register.error'),
-        description: message,
+        description: error.message,
         variant: 'destructive',
       });
     } finally {
@@ -190,160 +157,118 @@ const RegisterStudentForm = ({ onBack }: RegisterStudentFormProps) => {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               {/* Student Name */}
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('register.studentName')}</FormLabel>
-                    <FormControl>
-                      <Input placeholder={t('register.studentNamePlaceholder')} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormField control={form.control} name="name" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('register.studentName')}</FormLabel>
+                  <FormControl><Input placeholder={t('register.studentNamePlaceholder')} {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
               {/* Date of Birth */}
-              <FormField
-                control={form.control}
-                name="dob"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('register.dob')}</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormField control={form.control} name="dob" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('register.dob')}</FormLabel>
+                  <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-              {/* Mother's Name */}
-              <FormField
-                control={form.control}
-                name="motherName"
-                render={({ field }) => (
+              {/* Mother Details */}
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="motherName" render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t('register.motherName')}</FormLabel>
-                    <FormControl>
-                      <Input placeholder={t('register.motherNamePlaceholder')} {...field} />
-                    </FormControl>
+                    <FormControl><Input placeholder="Mother's full name" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
-                )}
-              />
+                )} />
+                <FormField control={form.control} name="motherPhone" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('register.motherPhone')}</FormLabel>
+                    <FormControl><Input placeholder="e.g. 0781234567" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
 
-              {/* Father's Name */}
-              <FormField
-                control={form.control}
-                name="fatherName"
-                render={({ field }) => (
+              {/* Father Details */}
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="fatherName" render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t('register.fatherName')}</FormLabel>
+                    <FormControl><Input placeholder="Father's full name" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="fatherPhone" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('register.fatherPhone')}</FormLabel>
+                    <FormControl><Input placeholder="e.g. 0781234567" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+
+              {/* Email */}
+              <FormField control={form.control} name="parentEmail" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('register.parentEmail')}</FormLabel>
+                  <FormControl><Input type="email" placeholder="parent@email.com" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              {/* School */}
+              <FormField control={form.control} name="schoolId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('register.selectSchool')}</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <Input placeholder={t('register.fatherNamePlaceholder')} {...field} />
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('register.selectSchoolPlaceholder')} />
+                      </SelectTrigger>
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                    <SelectContent>
+                      {schools.map((school: any) => (
+                        <SelectItem key={school.id} value={school.id}>
+                          {school.name} — {school.district}, {school.sector}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-              {/* School Selection */}
-              <FormField
-                control={form.control}
-                name="schoolId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('register.school')}</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={t('register.selectSchool')} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {schools.map((school) => (
-                          <SelectItem key={school.id} value={school.id}>
-                            {school.name} - {school.district}, {school.sector}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Grade Selection */}
-              <FormField
-                control={form.control}
-                name="currentGrade"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('register.grade')}</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={t('register.selectGrade')} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {grades.map((grade) => (
-                          <SelectItem key={grade} value={grade}>
-                            {grade}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* Grade */}
+              <FormField control={form.control} name="currentGrade" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('register.grade')}</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('register.gradePlaceholder')} />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {grades.map((grade) => (
+                        <SelectItem key={grade} value={grade}>{grade}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
               {/* Transcript Upload */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t('register.transcript')}</label>
-                <div className="border-2 border-dashed border-primary/40 rounded-lg p-4 text-center hover:bg-muted/30 transition-colors">
-                  <label htmlFor="register-transcripts" className="cursor-pointer flex flex-col items-center gap-1">
-                    <Upload className="w-6 h-6 text-primary" />
-                    <span className="text-sm font-medium">Click to upload</span>
-                    <span className="text-xs text-muted-foreground">Add one or more files</span>
-                  </label>
-                  <Input
-                    id="register-transcripts"
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    multiple
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                </div>
-
-                {transcriptFiles.length > 0 && (
-                  <div className="space-y-2 pt-1">
-                    {transcriptFiles.map((file, index) => (
-                      <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-md border px-3 py-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileText className="w-4 h-4 text-primary shrink-0" />
-                          <span className="text-sm truncate">{file.name}</span>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive"
-                          onClick={() => removeTranscriptFile(index)}
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <p className="text-xs text-muted-foreground">{t('register.transcriptHint')}</p>
-              </div>
+              <DocumentUpload
+                files={transcriptFiles}
+                onFilesChange={setTranscriptFiles}
+                accept=".pdf,.jpg,.jpeg,.png,.docx"
+                label="Upload Transcripts"
+                hint="Upload student transcripts, certificates, or academic records (PDF, Images, DOCX)"
+              />
 
               <Button type="submit" className="w-full" disabled={isSubmitting}>
                 {isSubmitting ? (

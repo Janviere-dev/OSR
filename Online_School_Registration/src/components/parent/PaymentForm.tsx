@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,87 +7,29 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2, CreditCard, Smartphone, BadgeCheck } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { ArrowLeft, Loader2, Upload, BadgeCheck } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
+import { DocumentUpload } from '@/components/ui/DocumentUpload';
+import { sendSystemMessage } from '@/hooks/useSendSystemMessage';
+import { createDocumentMarker, createPaymentMarker } from '@/lib/document-access';
 
 interface PaymentFormProps {
   onBack: () => void;
 }
 
-interface StudentForPayment {
-  id: string;
-  name: string;
-  current_grade: string | null;
-  school_id: string;
-  schools: {
-    id: string;
-    name: string;
-  };
-}
-
-interface PaymentHistoryRow {
-  id: string;
-  amount: number;
-  currency: string;
-  status: string;
-  payment_method: string | null;
-  description: string | null;
-  created_at: string;
-  students: {
-    name: string;
-  };
-  schools: {
-    name: string;
-  };
-}
-
-const getEdgeFunctionErrorMessage = async (error: unknown): Promise<string> => {
-  if (!error || typeof error !== 'object') {
-    return 'Unknown payment error';
-  }
-
-  const maybeError = error as {
-    message?: string;
-    context?: {
-      json?: () => Promise<{ error?: string; message?: string }>;
-      text?: () => Promise<string>;
-    };
-  };
-
-  if (maybeError.context?.json) {
-    try {
-      const body = await maybeError.context.json();
-      if (body?.error) return body.error;
-      if (body?.message) return body.message;
-    } catch {
-      // ignore JSON parse failures and fallback to other formats
-    }
-  }
-
-  if (maybeError.context?.text) {
-    try {
-      const text = await maybeError.context.text();
-      if (text) return text;
-    } catch {
-      // ignore text parse failures and fallback to generic message
-    }
-  }
-
-  return maybeError.message || 'Unknown payment error';
-};
-
 const PaymentForm = ({ onBack }: PaymentFormProps) => {
   const { t } = useLanguage();
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState('');
   const [amount, setAmount] = useState('');
-  const [mobileNetwork, setMobileNetwork] = useState<'MTN' | 'AIRTEL'>('MTN');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [proofFiles, setProofFiles] = useState<File[]>([]);
+  const [description, setDescription] = useState('');
 
   // Fetch students with their school info
   const { data: students = [] } = useQuery({
@@ -101,12 +43,12 @@ const PaymentForm = ({ onBack }: PaymentFormProps) => {
           name,
           current_grade,
           school_id,
-          schools!inner(id, name)
+          schools!inner(id, name, admin_id)
         `)
         .eq('parent_id', user.id)
         .not('school_id', 'is', null);
       if (error) throw error;
-      return (data ?? []) as StudentForPayment[];
+      return data;
     },
     enabled: !!user,
   });
@@ -123,8 +65,8 @@ const PaymentForm = ({ onBack }: PaymentFormProps) => {
           amount,
           currency,
           status,
-          payment_method,
           description,
+          proof_payment_url,
           created_at,
           students!inner(name),
           schools!inner(name)
@@ -132,26 +74,16 @@ const PaymentForm = ({ onBack }: PaymentFormProps) => {
         .eq('parent_id', user.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data ?? []) as PaymentHistoryRow[];
+      return data;
     },
     enabled: !!user,
   });
 
-  const handlePayWithFlutterwave = async () => {
-    if (!user || !selectedStudent || !amount || !phoneNumber) {
+  const handleSubmitProof = async () => {
+    if (!user || !selectedStudent || !amount || proofFiles.length === 0) {
       toast({
         title: t('payment.error'),
         description: t('payment.fillAllFields'),
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    const cleanedPhone = phoneNumber.replace(/\D/g, '').replace(/^0+/, '');
-    if (cleanedPhone.length < 7 || cleanedPhone.length > 10) {
-      toast({
-        title: t('payment.error'),
-        description: 'Enter a valid Rwanda mobile number without country code.',
         variant: 'destructive',
       });
       return;
@@ -170,61 +102,79 @@ const PaymentForm = ({ onBack }: PaymentFormProps) => {
     setIsSubmitting(true);
 
     try {
-      const student = students.find((s) => s.id === selectedStudent);
+      const student = students.find((s: any) => s.id === selectedStudent);
       if (!student) throw new Error('Student not found');
 
-      const configuredAppUrl = import.meta.env.VITE_PUBLIC_APP_URL?.trim();
-      const baseUrl = configuredAppUrl || window.location.origin;
-      const redirectUrl = new URL('/payment/callback', baseUrl).toString();
-
-      if (!redirectUrl.startsWith('https://')) {
-        throw new Error(
-          'Invalid callback URL. Configure VITE_PUBLIC_APP_URL with your public https app URL (for example: https://your-domain.com).'
-        );
+      // Upload proof files
+      const uploadedRefs: string[] = [];
+      for (const [index, file] of proofFiles.entries()) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${user.id}/${Date.now()}-${index}-payment-proof.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('student-documents')
+          .upload(fileName, file);
+        if (uploadError) throw uploadError;
+        uploadedRefs.push(fileName);
       }
 
-      const { data, error } = await supabase.functions.invoke('initialize-payment', {
-        body: {
-          studentId: student.id,
+      // Create payment record
+      const { data: payment, error: paymentError } = await supabase
+        .from('payments')
+        .insert({
+          student_id: student.id,
+          school_id: (student as any).schools.id,
+          parent_id: user.id,
           amount: parsedAmount,
-          redirectUrl,
-          mobileMoney: {
-            network: mobileNetwork,
-            countryCode: '250',
-            phoneNumber: cleanedPhone,
-          },
-        },
-      });
+          proof_payment_url: uploadedRefs.join(','),
+          description: description || null,
+          status: 'pending',
+        })
+        .select('id')
+        .single();
 
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      if (paymentError) throw paymentError;
 
-      // Redirect to Flutterwave payment page
-      window.location.href = data.payment_link;
-
-    } catch (error: unknown) {
-      const message = await getEdgeFunctionErrorMessage(error);
-      const isEdgeUnavailable = message.includes('Failed to send a request to the Edge Function');
+      // Notify school admin
+      const schoolAdminId = (student as any).schools.admin_id;
+      if (schoolAdminId && payment) {
+        await sendSystemMessage({
+          senderId: user.id,
+          receiverId: schoolAdminId,
+          content: `💰 Payment proof uploaded for ${(student as any).name} — Amount: ${parsedAmount} RWF.\n\n${createDocumentMarker('student-documents', 'Payment Proof', uploadedRefs)}\n${createPaymentMarker(payment.id)}\nPlease verify the proof and mark it as paid when confirmed.`,
+        });
+      }
 
       toast({
+        title: t('payment.success'),
+        description: t('payment.successDesc'),
+      });
+
+      // Reset form
+      setSelectedStudent('');
+      setAmount('');
+      setProofFiles([]);
+      setDescription('');
+      queryClient.invalidateQueries({ queryKey: ['my-payments'] });
+    } catch (error: any) {
+      toast({
         title: t('payment.error'),
-        description: isEdgeUnavailable
-          ? 'Payment service is not deployed yet. Deploy initialize-payment and verify-payment Edge Functions, then try again.'
-          : message,
+        description: error.message,
         variant: 'destructive',
       });
+    } finally {
       setIsSubmitting(false);
     }
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'completed':
-        return <Badge className="bg-secondary"><BadgeCheck className="w-3 h-3 mr-1" />{t('payment.statusCompleted')}</Badge>;
+      case 'paid':
+        return <Badge className="bg-green-600 text-white"><BadgeCheck className="w-3 h-3 mr-1" />{t('payment.statusCompleted')}</Badge>;
       case 'failed':
-        return <Badge variant="destructive">{t('payment.statusFailed')}</Badge>;
+      case 'rejected':
+        return <Badge className="bg-red-600 text-white">{t('payment.statusFailed')}</Badge>;
       default:
-        return <Badge variant="outline">{t('payment.statusPending')}</Badge>;
+        return <Badge className="bg-amber-500 text-white">{t('payment.statusPending')}</Badge>;
     }
   };
 
@@ -235,16 +185,16 @@ const PaymentForm = ({ onBack }: PaymentFormProps) => {
         {t('common.back')}
       </Button>
 
-      {/* Payment Form */}
+      {/* Payment Proof Upload Form */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-accent rounded-full flex items-center justify-center">
-              <CreditCard className="w-6 h-6 text-accent-foreground" />
+              <Upload className="w-6 h-6 text-accent-foreground" />
             </div>
             <div>
-              <CardTitle>{t('payment.title')}</CardTitle>
-              <CardDescription>{t('payment.flutterwaveDesc')}</CardDescription>
+               <CardTitle>Payment Proof</CardTitle>
+               <CardDescription>Upload a bank slip, transfer confirmation, or any payment evidence for school fee verification.</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -266,7 +216,7 @@ const PaymentForm = ({ onBack }: PaymentFormProps) => {
                     <SelectValue placeholder={t('payment.selectStudentPlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
-                    {students.map((student) => (
+                    {students.map((student: any) => (
                       <SelectItem key={student.id} value={student.id}>
                         {student.name} - {student.schools.name} ({student.current_grade || '-'})
                       </SelectItem>
@@ -287,60 +237,40 @@ const PaymentForm = ({ onBack }: PaymentFormProps) => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Mobile Money Network</label>
-                  <Select value={mobileNetwork} onValueChange={(v) => setMobileNetwork(v as 'MTN' | 'AIRTEL')}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MTN">MTN MoMo</SelectItem>
-                      <SelectItem value="AIRTEL">Airtel Money</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Phone Number (Rwanda)</label>
-                  <Input
-                    type="tel"
-                    placeholder="e.g. 078xxxxxxx"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                  />
-                </div>
+              {/* Description */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Description (optional)</label>
+                <Input
+                  placeholder="e.g. School fees for Term 1, Uniform payment..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
               </div>
 
-              {/* Payment Methods Info */}
-              <div className="p-4 bg-muted rounded-lg space-y-2">
-                <p className="text-sm font-medium">{t('payment.acceptedMethods')}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="gap-1">
-                    <Smartphone className="w-3 h-3" /> MTN MoMo
-                  </Badge>
-                  <Badge variant="outline" className="gap-1">
-                    <Smartphone className="w-3 h-3" /> Airtel Money
-                  </Badge>
-                  <Badge variant="outline" className="gap-1">
-                    <CreditCard className="w-3 h-3" /> {t('payment.cards')}
-                  </Badge>
-                </div>
-              </div>
+              {/* Proof Upload */}
+              <DocumentUpload
+                files={proofFiles}
+                onFilesChange={setProofFiles}
+                accept=".jpg,.jpeg,.png,.pdf"
+                label="Payment Proof"
+                 hint="Upload bank slip, transfer confirmation, or receipt (PDF, JPG, PNG)"
+                maxSizeMB={5}
+              />
 
               <Button
-                onClick={handlePayWithFlutterwave}
+                onClick={handleSubmitProof}
                 className="w-full"
-                disabled={isSubmitting || !selectedStudent || !amount || !phoneNumber}
+                disabled={isSubmitting || !selectedStudent || !amount || proofFiles.length === 0}
               >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    {t('payment.processing')}
+                    {t('common.submitting')}
                   </>
                 ) : (
                   <>
-                    <CreditCard className="w-4 h-4 mr-2" />
-                    {t('payment.payNow')}
+                    <Upload className="w-4 h-4 mr-2" />
+                    Submit Payment Proof
                   </>
                 )}
               </Button>
@@ -368,7 +298,7 @@ const PaymentForm = ({ onBack }: PaymentFormProps) => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {payments.map((payment) => (
+                  {payments.map((payment: any) => (
                     <TableRow key={payment.id}>
                       <TableCell className="font-medium">{payment.students.name}</TableCell>
                       <TableCell>{payment.schools.name}</TableCell>

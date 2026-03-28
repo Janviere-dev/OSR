@@ -1,11 +1,11 @@
 import { useLanguage } from '@/contexts/LanguageContext';
-import { ClipboardCheck, Search, BarChart3, Shield } from 'lucide-react';
+import { ClipboardCheck, Search, BarChart3, Upload } from 'lucide-react';
 
 const features = [
   { key: 'feature1', icon: ClipboardCheck },
   { key: 'feature2', icon: Search },
   { key: 'feature3', icon: BarChart3 },
-  { key: 'feature4', icon: Shield },
+  { key: 'feature4', icon: Upload },
 ];
 
 export function AboutSection() {
