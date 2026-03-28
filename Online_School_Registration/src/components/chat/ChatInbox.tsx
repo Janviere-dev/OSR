@@ -3,14 +3,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { ArrowLeft, Send, MessageSquare, Loader2, Bot, Inbox, ExternalLink } from 'lucide-react';
-import { format } from 'date-fns';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { ArrowLeft, Send, MessageSquare, Loader2, Bot, ExternalLink, Search, Check, CheckCheck } from 'lucide-react';
+import { format, isToday, isYesterday } from 'date-fns';
 import { sendSystemMessage } from '@/hooks/useSendSystemMessage';
 import { extractPaymentMarker, openDocumentReference, parseDocumentMarkers, stripMessageMarkers } from '@/lib/document-access';
 
@@ -40,12 +38,22 @@ interface Message {
   created_at: string;
 }
 
-const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
+const formatMsgTime = (iso: string) => format(new Date(iso), 'HH:mm');
+
+const formatConvTime = (iso: string) => {
+  const d = new Date(iso);
+  if (isToday(d)) return format(d, 'HH:mm');
+  if (isYesterday(d)) return 'Yesterday';
+  return format(d, 'MMM d');
+};
+
+const ChatInbox = ({ role, onBack }: ChatInboxProps) => {
   const { user } = useAuth();
   const { t } = useLanguage();
   const queryClient = useQueryClient();
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messageText, setMessageText] = useState('');
+  const [search, setSearch] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: allMessages = [], isLoading } = useQuery({
@@ -63,7 +71,7 @@ const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
     enabled: !!user,
   });
 
-  const partnerIds = [...new Set(allMessages.map(m => 
+  const partnerIds = [...new Set(allMessages.map(m =>
     m.sender_id === user?.id ? m.receiver_id : m.sender_id
   ))];
 
@@ -72,9 +80,7 @@ const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
     queryFn: async () => {
       if (partnerIds.length === 0) return [];
       const { data, error } = await supabase
-        .from('profiles')
-        .select('user_id, full_name')
-        .in('user_id', partnerIds);
+        .from('profiles').select('user_id, full_name').in('user_id', partnerIds);
       if (error) throw error;
       return data;
     },
@@ -86,9 +92,7 @@ const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
     queryFn: async () => {
       if (partnerIds.length === 0) return [];
       const { data, error } = await supabase
-        .from('schools')
-        .select('admin_id, name')
-        .in('admin_id', partnerIds);
+        .from('schools').select('admin_id, name').in('admin_id', partnerIds);
       if (error) throw error;
       return data;
     },
@@ -100,10 +104,7 @@ const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
     queryFn: async () => {
       if (!user) return null;
       const { data, error } = await supabase
-        .from('schools')
-        .select('name')
-        .eq('admin_id', user.id)
-        .maybeSingle();
+        .from('schools').select('name').eq('admin_id', user.id).maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -115,9 +116,7 @@ const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
     queryFn: async () => {
       if (partnerIds.length === 0 || role !== 'school_admin') return [];
       const { data, error } = await supabase
-        .from('students')
-        .select('parent_id, name, mother_name, father_name')
-        .in('parent_id', partnerIds);
+        .from('students').select('parent_id, name, mother_name, father_name').in('parent_id', partnerIds);
       if (error) throw error;
       return data;
     },
@@ -126,42 +125,30 @@ const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
 
   const getPartnerDisplayName = (partnerId: string) => {
     if (role === 'parent') {
-      const schoolInfo = schoolNames.find(s => s.admin_id === partnerId);
-      if (schoolInfo) return schoolInfo.name;
-      const profile = profiles.find(p => p.user_id === partnerId);
-      return profile?.full_name || 'School';
+      const s = schoolNames.find(s => s.admin_id === partnerId);
+      if (s) return s.name;
+      const p = profiles.find(p => p.user_id === partnerId);
+      return p?.full_name || 'School';
     }
-    
-    if (role === 'school_admin') {
-      const studentInfo = studentParentMap.find(s => s.parent_id === partnerId);
-      const profile = profiles.find(p => p.user_id === partnerId);
-      if (studentInfo && profile?.full_name) {
-        return `${studentInfo.name}'s Parent (${profile.full_name})`;
-      }
-      if (studentInfo) {
-        const parentName = studentInfo.mother_name || studentInfo.father_name || '';
-        return `${studentInfo.name}'s Parent${parentName ? ` (${parentName})` : ''}`;
-      }
-      if (profile?.full_name) return profile.full_name;
+    const si = studentParentMap.find(s => s.parent_id === partnerId);
+    const p = profiles.find(p => p.user_id === partnerId);
+    if (si && p?.full_name) return `${si.name}'s Parent (${p.full_name})`;
+    if (si) {
+      const name = si.mother_name || si.father_name || '';
+      return `${si.name}'s Parent${name ? ` (${name})` : ''}`;
     }
-    
-    const profile = profiles.find(p => p.user_id === partnerId);
-    return profile?.full_name || 'User';
+    return p?.full_name || 'User';
   };
 
   const conversations: Conversation[] = React.useMemo(() => {
     if (!user) return [];
-    const convMap = new Map<string, Conversation>();
-
+    const map = new Map<string, Conversation>();
     allMessages.forEach(msg => {
       const partnerId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
-      const key = partnerId;
-      
-      const existing = convMap.get(key);
+      const existing = map.get(partnerId);
       const isUnread = msg.receiver_id === user.id && !msg.is_read;
-
       if (!existing || new Date(msg.created_at) > new Date(existing.lastMessageAt)) {
-        convMap.set(key, {
+        map.set(partnerId, {
           partnerId,
           partnerName: getPartnerDisplayName(partnerId),
           applicationId: null,
@@ -173,11 +160,14 @@ const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
         existing.unreadCount += 1;
       }
     });
-
-    return Array.from(convMap.values()).sort(
+    return Array.from(map.values()).sort(
       (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
     );
   }, [allMessages, profiles, schoolNames, studentParentMap, user]);
+
+  const filtered = conversations.filter(c =>
+    c.partnerName.toLowerCase().includes(search.toLowerCase())
+  );
 
   const conversationMessages = React.useMemo(() => {
     if (!selectedConversation || !user) return [];
@@ -209,43 +199,22 @@ const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
   const markPaymentPaidMutation = useMutation({
     mutationFn: async (paymentId: string) => {
       if (!user) throw new Error('No user');
-
       const { data: payment, error: paymentError } = await supabase
-        .from('payments')
-        .select('id, student_id, parent_id, school_id')
-        .eq('id', paymentId)
-        .single();
+        .from('payments').select('id, student_id, parent_id, school_id').eq('id', paymentId).single();
       if (paymentError) throw paymentError;
-
-      const { error: payUpdateError } = await supabase.from('payments').update({ status: 'paid' }).eq('id', paymentId);
-      if (payUpdateError) throw payUpdateError;
-
-      const { error: appUpdateError } = await supabase
-        .from('applications')
-        .update({ status: 'enrolled' })
-        .eq('student_id', payment.student_id)
-        .eq('school_id', payment.school_id)
-        .in('status', ['approved', 'pending']);
-      if (appUpdateError) throw appUpdateError;
-
-      const { data: student, error: studentError } = await supabase
-        .from('students')
-        .select('name')
-        .eq('id', payment.student_id)
-        .single();
-      if (studentError) throw studentError;
-
-      const { error: studentUpdateError } = await supabase
-        .from('students')
-        .update({ status: 'enrolled' as const })
-        .eq('id', payment.student_id);
-      if (studentUpdateError) throw studentUpdateError;
-
-      await sendSystemMessage({
-        senderId: user.id,
-        receiverId: payment.parent_id,
-        content: `✅ Payment confirmed for ${student.name}. The student is now enrolled.`,
-      });
+      await supabase.from('payments').update({ status: 'paid' }).eq('id', paymentId);
+      await supabase.from('applications').update({ status: 'enrolled' })
+        .eq('student_id', payment.student_id).eq('school_id', payment.school_id)
+        .not('status', 'in', '("enrolled","rejected")');
+      const { data: student } = await supabase.from('students').select('name').eq('id', payment.student_id).single();
+      await supabase.from('students').update({ status: 'enrolled' as const }).eq('id', payment.student_id);
+      if (student) {
+        await sendSystemMessage({
+          senderId: user.id,
+          receiverId: payment.parent_id,
+          content: `✅ Payment confirmed for ${student.name}. The student is now enrolled.`,
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['messages'] });
@@ -258,8 +227,7 @@ const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
   useEffect(() => {
     if (!selectedConversation || !user) return;
     const unreadIds = conversationMessages
-      .filter(m => m.receiver_id === user.id && !m.is_read)
-      .map(m => m.id);
+      .filter(m => m.receiver_id === user.id && !m.is_read).map(m => m.id);
     if (unreadIds.length > 0) {
       supabase.from('messages').update({ is_read: true }).in('id', unreadIds).then(() => {
         queryClient.invalidateQueries({ queryKey: ['messages'] });
@@ -273,12 +241,10 @@ const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
 
   useEffect(() => {
     if (!user) return;
-    const channel = supabase
-      .channel('messages-realtime')
+    const channel = supabase.channel('messages-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
         queryClient.invalidateQueries({ queryKey: ['messages'] });
-      })
-      .subscribe();
+      }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, queryClient]);
 
@@ -290,50 +256,77 @@ const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
   const getSenderName = (msg: Message) => {
     if (msg.sender_id === user?.id) return null;
     if (role === 'parent') {
-      const schoolInfo = schoolNames.find(s => s.admin_id === msg.sender_id);
-      return schoolInfo?.name || 'School';
+      const s = schoolNames.find(s => s.admin_id === msg.sender_id);
+      return s?.name || 'School';
     }
     return selectedConversation?.partnerName || 'Parent';
   };
 
-  // Render message content with clickable document links
-  const renderMessageContent = (content: string) => {
+  const renderMessageContent = (content: string, isMine: boolean) => {
     const docMarkers = parseDocumentMarkers(content);
     const paymentId = extractPaymentMarker(content);
     const cleanContent = stripMessageMarkers(content);
+
+    // Also detect raw storage paths that weren't wrapped in markers (legacy messages)
+    const storagePathRegex = /([0-9a-f-]{36}\/[^\s,]+\.(?:pdf|jpg|jpeg|png))/gi;
     const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const parts = cleanContent.split(urlRegex);
+
+    const renderText = (text: string) => {
+      // Split on URLs first
+      const parts = text.split(urlRegex);
+      return parts.map((part, i) => {
+        if (urlRegex.test(part)) {
+          // Check if it's a storage URL — render as button
+          if (part.includes('/storage/v1/')) {
+            return (
+              <button key={i} onClick={() => void openDocumentReference(part)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium mt-1 ${isMine ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-primary/10 hover:bg-primary/20 text-primary'} transition-colors`}>
+                <ExternalLink className="w-3 h-3" />View Document
+              </button>
+            );
+          }
+          return <span key={i} className="underline opacity-70 text-xs break-all">{part}</span>;
+        }
+        // Detect raw storage paths in plain text (legacy messages)
+        const pathParts = part.split(storagePathRegex);
+        return pathParts.map((chunk, j) => {
+          if (storagePathRegex.test(chunk)) {
+            storagePathRegex.lastIndex = 0;
+            return (
+              <button key={`${i}-${j}`} onClick={() => void openDocumentReference(chunk, 'student-documents')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium mt-1 ${isMine ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-primary/10 hover:bg-primary/20 text-primary'} transition-colors`}>
+                <ExternalLink className="w-3 h-3" />View Document
+              </button>
+            );
+          }
+          storagePathRegex.lastIndex = 0;
+          return <span key={`${i}-${j}`}>{chunk}</span>;
+        });
+      });
+    };
 
     return (
-      <div className="space-y-2">
-        <div>
-          {parts.map((part, i) => {
-            if (urlRegex.test(part)) {
-              return (
-                <Button key={i} type="button" variant="outline" size="sm" className="my-1 inline-flex" onClick={() => void openDocumentReference(part)}>
-                  <ExternalLink className="w-3 h-3 mr-1" />
-                  View Document
-                </Button>
-              );
-            }
-            return <span key={i}>{part}</span>;
-          })}
-        </div>
+      <div className="space-y-1.5">
+        {cleanContent && <div className="whitespace-pre-wrap leading-relaxed">{renderText(cleanContent)}</div>}
         {docMarkers.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {docMarkers.flatMap((marker) => marker.refs.map((ref, index) => (
-              <Button key={`${marker.label}-${index}-${ref}`} type="button" variant="outline" size="sm" onClick={() => void openDocumentReference(ref, marker.bucket)}>
-                <ExternalLink className="w-3 h-3 mr-1" />
-                {marker.refs.length > 1 ? `${marker.label} ${index + 1}` : marker.label}
-              </Button>
+          <div className="flex flex-wrap gap-1.5 pt-0.5">
+            {docMarkers.flatMap((marker) => marker.refs.map((ref, idx) => (
+              <button key={`${marker.label}-${idx}`}
+                onClick={() => void openDocumentReference(ref, marker.bucket)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isMine ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-primary/10 hover:bg-primary/20 text-primary'} transition-colors`}>
+                <ExternalLink className="w-3 h-3" />
+                {marker.refs.length > 1 ? `${marker.label} ${idx + 1}` : marker.label}
+              </button>
             )))}
           </div>
         )}
         {role === 'school_admin' && paymentId && (
-          <Button type="button" size="sm" onClick={() => markPaymentPaidMutation.mutate(paymentId)} disabled={markPaymentPaidMutation.isPending}>
-            {markPaymentPaidMutation.isPending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-            Mark as Paid
-          </Button>
+          <button onClick={() => markPaymentPaidMutation.mutate(paymentId)}
+            disabled={markPaymentPaidMutation.isPending}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500 hover:bg-green-600 text-white transition-colors disabled:opacity-60 mt-0.5">
+            {markPaymentPaidMutation.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+            ✓ Mark as Paid
+          </button>
         )}
       </div>
     );
@@ -345,132 +338,236 @@ const ChatInbox = ({ role, schoolId, onBack }: ChatInboxProps) => {
     return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
-  if (selectedConversation) {
-    return (
-      <div className="max-w-3xl mx-auto">
-        <Button variant="ghost" onClick={() => setSelectedConversation(null)} className="mb-4">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          {t('chat.backToInbox')}
-        </Button>
+  const showChat = !!selectedConversation;
 
-        <Card className="flex flex-col h-[600px]">
-          <CardHeader className="border-b pb-3">
-            <div className="flex items-center gap-3">
-              <Avatar>
-                <AvatarFallback className="bg-primary/10 text-primary">
-                  {selectedConversation.partnerName.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <CardTitle className="text-lg">{selectedConversation.partnerName}</CardTitle>
+  return (
+    <div className="flex h-[calc(100vh-160px)] min-h-[520px] rounded-2xl overflow-hidden border shadow-xl bg-background">
+
+      {/* ── Sidebar ── */}
+      <div className={`flex flex-col bg-gradient-to-b from-primary to-primary/90 ${showChat ? 'hidden md:flex' : 'flex'} w-full md:w-96 flex-shrink-0`}>
+
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-4 border-b border-white/20">
+          {onBack && (
+            <button onClick={onBack} className="text-white/60 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-semibold text-sm truncate">
+              {role === 'school_admin' ? (ownSchool?.name || 'School Inbox') : 'My Messages'}
+            </p>
+            <p className="text-white/60 text-xs">
+              {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
+              {totalUnread > 0 && <span className="text-white/90 font-medium ml-1">· {totalUnread} unread</span>}
+            </p>
+          </div>
+          <MessageSquare className="w-4 h-4 text-white/40 flex-shrink-0" />
+        </div>
+
+        {/* Search */}
+        <div className="px-3 py-2.5 border-b border-white/20">
+          <div className="flex items-center gap-2 bg-white/15 border border-white/20 rounded-xl px-3 py-2">
+            <Search className="w-3.5 h-3.5 text-white/50 flex-shrink-0" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search conversations..."
+              className="bg-transparent text-white text-xs placeholder:text-white/50 outline-none flex-1 min-w-0" />
+          </div>
+        </div>
+
+        {/* Conversation list */}
+        <ScrollArea className="flex-1">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+              <MessageSquare className="w-10 h-10 text-white/20 mb-3" />
+              <p className="text-white/50 text-sm">{search ? 'No results' : t('chat.noMessages')}</p>
             </div>
-          </CardHeader>
-
-          <ScrollArea className="flex-1 p-4">
-            <div className="space-y-3">
-              {conversationMessages.map((msg) => {
-                const isMine = msg.sender_id === user?.id;
+          ) : (
+            <div className="py-1">
+              {filtered.map((conv, i) => {
+                const isActive = selectedConversation?.partnerId === conv.partnerId;
+                const initials = conv.partnerName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
                 return (
-                  <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[75%] rounded-2xl px-4 py-2 ${
-                      msg.is_system 
-                        ? 'bg-muted text-muted-foreground text-center max-w-full w-full text-sm italic'
-                        : isMine 
-                          ? 'bg-primary text-primary-foreground' 
-                          : 'bg-muted text-foreground'
-                    }`}>
-                      {msg.is_system && <Bot className="w-3 h-3 inline mr-1" />}
-                      {!isMine && !msg.is_system && (
-                        <p className="text-xs font-semibold mb-1 text-primary">{getSenderName(msg)}</p>
+                  <button key={`${conv.partnerId}-${i}`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all ${isActive ? 'bg-white/20 border-l-[3px] border-white' : 'hover:bg-white/10 border-l-[3px] border-transparent'}`}
+                    onClick={() => setSelectedConversation(conv)}>
+                    {/* Avatar */}
+                    <div className="relative flex-shrink-0">
+                      <div className={`w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold ${isActive ? 'bg-white text-primary' : 'bg-white/20 text-white'}`}>
+                        {initials}
+                      </div>
+                      {conv.unreadCount > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-white text-primary rounded-full text-[10px] font-bold flex items-center justify-center">
+                          {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
+                        </span>
                       )}
-                      <div className="text-sm whitespace-pre-wrap">{renderMessageContent(msg.content)}</div>
-                      <p className={`text-[10px] mt-1 ${isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                        {format(new Date(msg.created_at), 'HH:mm')}
+                    </div>
+                    {/* Text */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <p className={`text-sm font-semibold truncate ${conv.unreadCount > 0 ? 'text-white' : 'text-white/80'}`}>
+                          {conv.partnerName}
+                        </p>
+                        <span className="text-[10px] text-white/50 flex-shrink-0">
+                          {formatConvTime(conv.lastMessageAt)}
+                        </span>
+                      </div>
+                      <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'text-white/80 font-medium' : 'text-white/50'}`}>
+                        {conv.lastMessage || '...'}
                       </p>
                     </div>
-                  </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </ScrollArea>
+      </div>
+
+      {/* ── Chat pane ── */}
+      {selectedConversation ? (
+        <div className="flex-1 flex flex-col min-w-0"
+          style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, hsl(var(--muted)) 1px, transparent 0)', backgroundSize: '24px 24px', backgroundPosition: '0 0' }}>
+
+          {/* Chat header */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
+            <button className="md:hidden text-muted-foreground hover:text-foreground p-1"
+              onClick={() => setSelectedConversation(null)}>
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <Avatar className="w-9 h-9">
+              <AvatarFallback className="bg-primary/15 text-primary font-bold text-sm">
+                {selectedConversation.partnerName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm text-foreground truncate">{selectedConversation.partnerName}</p>
+              <p className="text-xs text-green-500">Online</p>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <ScrollArea className="flex-1 px-4 py-4">
+            <div className="space-y-1 max-w-2xl mx-auto">
+              {conversationMessages.map((msg, idx) => {
+                const isMine = msg.sender_id === user?.id;
+                const prevMsg = conversationMessages[idx - 1];
+                const showDateDivider = !prevMsg ||
+                  format(new Date(prevMsg.created_at), 'yyyy-MM-dd') !== format(new Date(msg.created_at), 'yyyy-MM-dd');
+
+                // System message
+                if (msg.is_system) {
+                  return (
+                    <React.Fragment key={msg.id}>
+                      {showDateDivider && (
+                        <div className="flex items-center justify-center py-3">
+                          <span className="bg-background/80 text-muted-foreground text-[11px] px-3 py-1 rounded-full border shadow-sm">
+                            {isToday(new Date(msg.created_at)) ? 'Today' : isYesterday(new Date(msg.created_at)) ? 'Yesterday' : format(new Date(msg.created_at), 'MMMM d, yyyy')}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-center py-1">
+                        <div className="bg-background/90 border rounded-xl px-4 py-2 max-w-[85%] text-center shadow-sm">
+                          <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                            <Bot className="w-3 h-3" />
+                            <span className="text-[10px] font-medium uppercase tracking-wide">System</span>
+                          </div>
+                          <div className="text-xs text-foreground">{renderMessageContent(msg.content, false)}</div>
+                        </div>
+                      </div>
+                    </React.Fragment>
+                  );
+                }
+
+                // Regular message
+                const prevIsSameSender = prevMsg && !prevMsg.is_system && prevMsg.sender_id === msg.sender_id;
+                const showAvatar = !isMine && !prevIsSameSender;
+
+                return (
+                  <React.Fragment key={msg.id}>
+                    {showDateDivider && (
+                      <div className="flex items-center justify-center py-3">
+                        <span className="bg-background/80 text-muted-foreground text-[11px] px-3 py-1 rounded-full border shadow-sm">
+                          {isToday(new Date(msg.created_at)) ? 'Today' : isYesterday(new Date(msg.created_at)) ? 'Yesterday' : format(new Date(msg.created_at), 'MMMM d, yyyy')}
+                        </span>
+                      </div>
+                    )}
+                    <div className={`flex items-end gap-2 ${isMine ? 'justify-end' : 'justify-start'} ${prevIsSameSender ? 'mt-0.5' : 'mt-3'}`}>
+                      {/* Left avatar placeholder to keep bubbles aligned */}
+                      {!isMine && (
+                        <div className="w-7 flex-shrink-0">
+                          {showAvatar && (
+                            <Avatar className="w-7 h-7">
+                              <AvatarFallback className="bg-primary/15 text-primary text-[10px] font-bold">
+                                {getSenderName(msg)?.charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                          )}
+                        </div>
+                      )}
+
+                      <div className={`max-w-[72%] flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
+                        {showAvatar && !isMine && (
+                          <span className="text-[11px] font-semibold text-primary ml-1 mb-0.5">
+                            {getSenderName(msg)}
+                          </span>
+                        )}
+                        <div className={`px-3.5 py-2 text-sm shadow-sm ${
+                          isMine
+                            ? 'bg-primary text-primary-foreground rounded-2xl rounded-br-sm'
+                            : 'bg-background text-foreground border rounded-2xl rounded-bl-sm'
+                        }`}>
+                          {renderMessageContent(msg.content, isMine)}
+                        </div>
+                        {/* Timestamp + read receipt */}
+                        <div className={`flex items-center gap-1 mt-0.5 px-1 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
+                          <span className="text-[10px] text-muted-foreground">{formatMsgTime(msg.created_at)}</span>
+                          {isMine && (
+                            msg.is_read
+                              ? <CheckCheck className="w-3 h-3 text-primary" />
+                              : <Check className="w-3 h-3 text-muted-foreground" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </React.Fragment>
                 );
               })}
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
 
-          <div className="border-t p-3">
-            <div className="flex gap-2">
+          {/* Input */}
+          <div className="px-4 py-3 border-t bg-background/95 backdrop-blur-sm">
+            <div className="flex items-center gap-2 max-w-2xl mx-auto">
               <Input
                 value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
+                onChange={e => setMessageText(e.target.value)}
                 placeholder={t('chat.typePlaceholder')}
-                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                className="flex-1"
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                className="flex-1 rounded-full bg-muted border-0 focus-visible:ring-1 text-sm"
               />
-              <Button onClick={handleSend} disabled={sendMutation.isPending || !messageText.trim()}>
-                {sendMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              <Button onClick={handleSend}
+                disabled={sendMutation.isPending || !messageText.trim()}
+                size="icon"
+                className="rounded-full w-10 h-10 flex-shrink-0 shadow-md">
+                {sendMutation.isPending
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Send className="w-4 h-4" />}
               </Button>
             </div>
           </div>
-        </Card>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-3xl mx-auto">
-      {onBack && (
-        <Button variant="ghost" onClick={onBack} className="mb-4">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          {t('common.back')}
-        </Button>
-      )}
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Inbox className="w-6 h-6 text-primary" />
-              <CardTitle>{t('chat.inbox')}</CardTitle>
-            </div>
-            {totalUnread > 0 && (
-              <Badge className="bg-destructive text-destructive-foreground">{totalUnread} {t('chat.unread')}</Badge>
-            )}
+        </div>
+      ) : (
+        /* Empty state on desktop when no conversation selected */
+        <div className="hidden md:flex flex-1 items-center justify-center flex-col gap-3 text-muted-foreground bg-muted/10">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <MessageSquare className="w-8 h-8 text-primary/40" />
           </div>
-        </CardHeader>
-        <CardContent>
-          {conversations.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>{t('chat.noMessages')}</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {conversations.map((conv, i) => (
-                <button
-                  key={`${conv.partnerId}-${i}`}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors text-left"
-                  onClick={() => setSelectedConversation(conv)}
-                >
-                  <Avatar>
-                    <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                      {conv.partnerName.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium text-sm truncate">{conv.partnerName}</p>
-                      <span className="text-xs text-muted-foreground">
-                        {format(new Date(conv.lastMessageAt), 'MMM d')}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{conv.lastMessage}</p>
-                  </div>
-                  {conv.unreadCount > 0 && (
-                    <Badge className="bg-destructive text-destructive-foreground text-xs">{conv.unreadCount}</Badge>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <p className="text-sm font-medium">Select a conversation</p>
+          <p className="text-xs text-muted-foreground/60">Choose from the list on the left</p>
+        </div>
+      )}
     </div>
   );
 };

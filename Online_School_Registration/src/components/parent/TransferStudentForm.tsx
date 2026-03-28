@@ -298,7 +298,7 @@ const TransferStudentForm = ({ onBack }: TransferStudentFormProps) => {
                 <label className="text-sm font-medium">{t('transfer.transcripts')}</label>
                 <Input
                   type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
+                  accept=".pdf"
                   multiple
                   onChange={handleFilesChange}
                 />

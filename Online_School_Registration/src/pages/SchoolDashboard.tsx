@@ -6,7 +6,7 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { SchoolSidebar } from '@/components/school/SchoolSidebar';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, FileText, Landmark, ChevronRight } from 'lucide-react';
+import { Loader2, FileText, Landmark, ChevronRight, Users, MessageSquare } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const SchoolDashboard = () => {
@@ -69,7 +69,7 @@ const SchoolDashboard = () => {
             <div className="absolute top-1/2 -left-20 w-60 h-60 bg-accent/5 rounded-full blur-3xl" />
           </div>
 
-          <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
+          <div className="space-y-8 animate-fade-in">
             {/* Welcome Header */}
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary to-primary/80 p-8 lg:p-10 text-primary-foreground shadow-xl">
               <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-50" />
@@ -84,8 +84,8 @@ const SchoolDashboard = () => {
               </div>
             </div>
 
-            {/* Two Cards */}
-            <div className="grid md:grid-cols-2 gap-6">
+            {/* Dashboard Cards */}
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* Total Applications Card */}
               <Card 
                 className="group cursor-pointer border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
@@ -126,6 +126,47 @@ const SchoolDashboard = () => {
                   <CardDescription className="mt-1">{t('school.welcome.govPortalDesc')}</CardDescription>
                 </CardContent>
               </Card>
+
+              {/* Student Management Card */}
+              <Card 
+                className="group cursor-pointer border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+                onClick={() => navigate('/school/students')}
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center">
+                      <Users className="w-7 h-7 text-blue-500" />
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-blue-500 transition-colors" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <CardTitle className="text-lg">Student Management</CardTitle>
+                  <CardDescription className="mt-1">View enrolled students, manage classes, export sheets</CardDescription>
+                </CardContent>
+              </Card>
+
+              {/* Chat Inbox Card */}
+              <Card 
+                className="group cursor-pointer border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+                onClick={() => navigate('/school/inbox')}
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+                      <MessageSquare className="w-7 h-7 text-emerald-500" />
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-emerald-500 transition-colors" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <CardTitle className="text-lg">Chat Inbox</CardTitle>
+                  <CardDescription className="mt-1">Messages from parents about applications & payments</CardDescription>
+                </CardContent>
+              </Card>
+
             </div>
           </div>
         </main>

@@ -251,9 +251,9 @@ const PaymentForm = ({ onBack }: PaymentFormProps) => {
               <DocumentUpload
                 files={proofFiles}
                 onFilesChange={setProofFiles}
-                accept=".jpg,.jpeg,.png,.pdf"
-                label="Payment Proof"
-                 hint="Upload bank slip, transfer confirmation, or receipt (PDF, JPG, PNG)"
+                accept=".pdf"
+                label="Payment Proof (PDF)"
+                hint="Upload bank slip, transfer confirmation, or receipt — PDF only"
                 maxSizeMB={5}
               />
 

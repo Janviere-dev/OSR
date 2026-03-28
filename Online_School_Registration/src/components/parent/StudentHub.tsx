@@ -116,6 +116,13 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
         });
 
       if (error) throw error;
+
+      // Reset payment to unpaid so admin must mark paid for the new year
+      await supabase
+        .from('payments')
+        .update({ status: 'unpaid' })
+        .eq('student_id', selectedStudentId)
+        .eq('school_id', student.school_id);
     },
     onSuccess: () => {
       toast({ title: t('hub.reregisterSuccess'), description: t('hub.reregisterSuccessDesc') });
@@ -144,6 +151,8 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'enrolled':
+        return <Badge className="bg-blue-600 text-white">Enrolled</Badge>;
       case 'passed':
         return <Badge className="bg-green-600 text-white">{t('hub.status.passed')}</Badge>;
       case 'repeat':

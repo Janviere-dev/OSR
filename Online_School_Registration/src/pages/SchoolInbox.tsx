@@ -42,9 +42,9 @@ const SchoolInbox = () => {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-background">
+      <div className="min-h-screen flex w-full bg-gradient-to-br from-secondary/30 via-background to-background">
         <SchoolSidebar school={school} />
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 lg:p-8 overflow-auto">
           <ChatInbox role="school_admin" schoolId={school.id} />
         </main>
       </div>

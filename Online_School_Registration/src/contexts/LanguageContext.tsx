@@ -371,7 +371,8 @@ export const translations: Translations = {
   'school.students.expandAll': { en: 'Expand All', rw: 'Fungura Byose' },
   'school.students.collapseAll': { en: 'Collapse All', rw: 'Funga Byose' },
   'school.students.studentSingular': { en: 'student', rw: 'umunyeshuri' },
-  'school.students.studentPlural': { en: 'students', rw: 'abanyeshuri' },
+'school.students.studentPlural': { en: 'students', rw: 'abanyeshuri' },
+  'rereg.polite': { en: 'Munezeo Janviere has completed Secondary 2 Class A. Please go to Student Hub → Re-register for the new year.', rw: 'Munezeo Janviere yizeze Secondary 2 Class A. Nyuma wandike mu Student Hub → Re-register ku mwaka mushya.' },
   
   // School Settings
   'school.settings.title': { en: 'School Settings', rw: 'Igenamiterere ry\'Ishuri' },

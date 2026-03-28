@@ -265,9 +265,9 @@ const RegisterStudentForm = ({ onBack }: RegisterStudentFormProps) => {
               <DocumentUpload
                 files={transcriptFiles}
                 onFilesChange={setTranscriptFiles}
-                accept=".pdf,.jpg,.jpeg,.png,.docx"
-                label="Upload Transcripts"
-                hint="Upload student transcripts, certificates, or academic records (PDF, Images, DOCX)"
+                accept=".pdf"
+                label="Upload Transcripts (PDF)"
+                hint="Upload student transcripts or academic records — PDF only"
               />
 
               <Button type="submit" className="w-full" disabled={isSubmitting}>

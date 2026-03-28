@@ -88,19 +88,74 @@ export function TransfersTab({ applications, schoolId }: TransfersTabProps) {
     },
   });
 
+  // Fetch payments status
+  const { data: paymentMap = {} } = useQuery({
+    queryKey: ['transfers-payments', schoolId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('student_id, status')
+        .eq('school_id', schoolId);
+      if (error) throw error;
+      const map: Record<string, string> = {};
+      data?.forEach((p: any) => {
+        map[p.student_id] = p.status;
+      });
+      return map;
+    },
+  });
+
+  // Update payment status mutation
+  const updatePaymentMutation = useMutation({
+    mutationFn: async ({ studentId, newStatus }: { studentId: string; newStatus: string }) => {
+      const { data: existing } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('student_id', studentId)
+        .eq('school_id', schoolId)
+        .single();
+
+      if (existing) {
+        const { error } = await supabase
+          .from('payments')
+          .update({ status: newStatus })
+          .eq('id', existing.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transfers-payments', schoolId] });
+    },
+  });
+
+  const getPaymentSelect = (studentId: string) => (
+    <Select
+      value={paymentMap[studentId] || 'unpaid'}
+      onValueChange={(val) => updatePaymentMutation.mutate({ studentId, newStatus: val })}
+    >
+      <SelectTrigger className="w-[90px] h-8">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="unpaid">Unpaid</SelectItem>
+        <SelectItem value="paid">Paid</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+
   const acceptMutation = useMutation({
     mutationFn: async ({ applicationId, studentId, classStream, grade }: { applicationId: string; studentId: string; classStream: string; grade: string }) => {
       const studentIdCode = generateStudentId();
 
       const { error: studentError } = await supabase
         .from('students')
-        .update({ status: 'pending', class_stream: classStream, current_grade: grade, student_id_code: studentIdCode, school_id: schoolId })
+        .update({ status: 'enrolled', class_stream: classStream, current_grade: grade, student_id_code: studentIdCode, school_id: schoolId })
         .eq('id', studentId);
       if (studentError) throw studentError;
 
       const { error: appError } = await supabase
         .from('applications')
-        .update({ status: 'approved' })
+        .update({ status: 'enrolled' })
         .eq('id', applicationId);
       if (appError) throw appError;
 
@@ -113,11 +168,15 @@ export function TransfersTab({ applications, schoolId }: TransfersTabProps) {
       });
       if (selectedApp && user) {
         supabase.from('students').select('parent_id').eq('id', selectedApp.students.id).single()
-          .then(({ data: s }) => {
+          .then(async ({ data: s }) => {
             if (s) {
-              let msgContent = `🎉 Transfer approved! Student ID: ${data.studentIdCode}. Your child ${selectedApp.students.name} has been transferred and enrolled in ${selectedGrade} Class ${selectedStream}.`;
-              if (school?.requirements_pdf_url) {
-                msgContent += `\n\n📄 School Requirements: ${school.requirements_pdf_url}\n\nPlease review and proceed with payment.`;
+              const { createDocumentMarker } = await import('@/lib/document-access');
+              const reqRefs = school?.requirements_pdf_url
+                ? school.requirements_pdf_url.split(',').map((r: string) => r.trim()).filter(Boolean)
+                : [];
+              let msgContent = `🎉 Transfer approved!\n\n${selectedApp.students.name} (ID: ${data.studentIdCode}) has been enrolled in ${selectedGrade} Class ${selectedStream}.\n\nPlease proceed with payment of school fees.`;
+              if (reqRefs.length > 0) {
+                msgContent += `\n\n${createDocumentMarker('school-documents', 'View School Requirements', reqRefs)}`;
               }
               sendSystemMessage({ senderId: user.id, receiverId: s.parent_id, applicationId: selectedApp.id, content: msgContent });
             }
@@ -218,6 +277,7 @@ export function TransfersTab({ applications, schoolId }: TransfersTabProps) {
               <TableHead>{t('school.table.student')}</TableHead>
               <TableHead>{t('school.transfers.fromSchool')}</TableHead>
               <TableHead>{t('school.table.grade')}</TableHead>
+              <TableHead>Payment</TableHead>
               <TableHead>{t('school.table.date')}</TableHead>
               <TableHead>{t('school.table.status')}</TableHead>
               <TableHead className="text-right">{t('school.table.actions')}</TableHead>
@@ -239,6 +299,7 @@ export function TransfersTab({ applications, schoolId }: TransfersTabProps) {
                   </div>
                 </TableCell>
                 <TableCell>{app.students.current_grade || '-'}</TableCell>
+                <TableCell>{getPaymentSelect(app.students.id)}</TableCell>
                 <TableCell>{format(new Date(app.created_at), 'MMM d, yyyy')}</TableCell>
                 <TableCell>{getStatusBadge(app.status)}</TableCell>
                 <TableCell className="text-right">

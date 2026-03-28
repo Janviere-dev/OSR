@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 import { sendSystemMessage } from '@/hooks/useSendSystemMessage';
+import { openDocumentReference, splitStoredReferences } from '@/lib/document-access';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Loader2,
   Users,
@@ -17,7 +19,9 @@ import {
   ChevronRight,
   Download,
   Trash2,
-  FileText
+  FileText,
+  Eye,
+  CreditCard
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -80,13 +84,110 @@ export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('schools')
-        .select('name')
+        .select('name, requirements_pdf_url')
         .eq('id', schoolId)
         .single();
       if (error) throw error;
       return data;
     },
   });
+
+  // Fetch transcripts per student from their applications
+  const { data: transcriptMap = {} } = useQuery({
+    queryKey: ['student-transcripts-mgmt', schoolId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('applications')
+        .select('student_id, transcripts_url')
+        .eq('school_id', schoolId)
+        .not('transcripts_url', 'is', null);
+      if (error) throw error;
+      const map: Record<string, string> = {};
+      data?.forEach((a: any) => {
+        if (!map[a.student_id] && a.transcripts_url) map[a.student_id] = a.transcripts_url;
+      });
+      return map;
+    },
+  });
+
+  // Fetch payments status per student
+  const { data: paymentMap = {} } = useQuery({
+    queryKey: ['student-payments-mgmt', schoolId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('student_id, status')
+        .eq('school_id', schoolId);
+      if (error) throw error;
+      const map: Record<string, string> = {};
+      data?.forEach((p: any) => {
+        map[p.student_id] = p.status;
+      });
+      return map;
+    },
+  });
+
+  // Update payment status mutation
+  const updatePaymentMutation = useMutation({
+    mutationFn: async ({ studentId, newStatus }: { studentId: string; newStatus: string }) => {
+      const { data: existing } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('student_id', studentId)
+        .eq('school_id', schoolId)
+        .single();
+
+      if (existing) {
+        const { error } = await supabase
+          .from('payments')
+          .update({ status: newStatus })
+          .eq('id', existing.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['student-payments-mgmt', schoolId] });
+    },
+  });
+
+  const getPaymentBadge = (studentId: string) => {
+    const status = paymentMap[studentId];
+    if (status === 'paid') {
+      return <span className="text-green-700 font-semibold">Paid</span>;
+    }
+    return <span className="text-red-600 font-semibold">Unpaid</span>;
+  };
+
+  const getPaymentSelect = (studentId: string) => (
+    <Select
+      value={paymentMap[studentId] || 'unpaid'}
+      onValueChange={(val) => updatePaymentMutation.mutate({ studentId, newStatus: val })}
+    >
+      <SelectTrigger className="w-[90px] h-8">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="unpaid">Unpaid</SelectItem>
+        <SelectItem value="paid">Paid</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+
+  const getTranscriptLinks = (studentId: string) => {
+    return splitStoredReferences(transcriptMap[studentId]);
+  };
+
+  const openDocument = async (ref: string) => {
+    try {
+      await openDocumentReference(ref, 'student-documents');
+    } catch (error: any) {
+      toast({
+        title: 'Could not open document',
+        description: error?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   // Clear class sheet - remove students from class and notify parents
   const handleClearSheet = async (grade: string, stream: string, sheetStudents: Student[]) => {
@@ -107,7 +208,7 @@ export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
       await sendSystemMessage({
         senderId: user.id,
         receiverId: student.parent_id,
-        content: `📢 New academic year update! ${student.name} has been cleared from ${grade} Class ${stream}. Please go to Student Hub → Re-register for the new year.`,
+        content: `${t('rereg.polite').replace('Munezeo Janviere', student.name).replace('Secondary 2 Class A', `${grade} Class ${stream}`)}`,
       });
     }
 
@@ -287,7 +388,7 @@ export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
                                             <Button
                                               size="sm"
                                               variant="outline"
-                                              className="border-osr-warning bg-osr-warning/15 text-foreground hover:bg-osr-warning/25"
+                                              className="border-osr-warning bg-osr-warning/80 text-foreground hover:bg-osr-warning/90"
                                               onClick={() => handleClearSheet(grade, stream, streamStudents)}
                                             >
                                               <Trash2 className="w-4 h-4 mr-1" />
@@ -311,12 +412,14 @@ export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
                                 ) : (
                                   <Table>
                                     <TableHeader>
-                                      <TableRow>
-                                        <TableHead>#</TableHead>
-                                        <TableHead>{t('school.students.studentId')}</TableHead>
-                                        <TableHead>{t('school.table.student')}</TableHead>
-                                        <TableHead>{t('school.students.class')}</TableHead>
-                                      </TableRow>
+                                    <TableRow>
+                                      <TableHead>#</TableHead>
+                                      <TableHead>{t('school.students.studentId')}</TableHead>
+                                      <TableHead>{t('school.table.student')}</TableHead>
+                                      <TableHead>Payment</TableHead>
+                                      <TableHead>Documents</TableHead>
+                                      <TableHead>{t('school.students.class')}</TableHead>
+                                    </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                       {streamStudents.map((student, idx) => (
@@ -329,6 +432,26 @@ export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
                                             <div>
                                               <p className="font-medium">{student.name}</p>
                                             </div>
+                                          </TableCell>
+                                          <TableCell>{getPaymentSelect(student.id)}</TableCell>
+                                          <TableCell>
+                                            {getTranscriptLinks(student.id).length > 0 ? (
+                                              <div className="flex gap-1">
+                                                {getTranscriptLinks(student.id).map((ref, i) => (
+                                                  <Button
+                                                    key={i}
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => openDocument(ref)}
+                                                    title={`View transcript ${i + 1}`}
+                                                  >
+                                                    <Eye className="w-4 h-4" />
+                                                  </Button>
+                                                ))}
+                                              </div>
+                                            ) : (
+                                              <span className="text-xs text-muted-foreground">—</span>
+                                            )}
                                           </TableCell>
                                           <TableCell>{stream}</TableCell>
                                         </TableRow>

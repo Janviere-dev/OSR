@@ -36,20 +36,19 @@ export async function getAccessibleDocumentUrl(ref: string, fallbackBucket?: str
   const { bucket, path } = getStorageRefDetails(ref, fallbackBucket);
   if (!bucket) return ref;
 
-  if (bucket === 'student-documents') {
-    const { data, error } = await supabase.functions.invoke('resolve-document-url', {
-      body: { ref, bucket, path, expiresIn },
-    });
+  // Both buckets are public — use direct signed URL (no edge function needed).
+  // createSignedUrl works for authenticated users and gives a time-limited URL
+  // even on public buckets, which is cleaner than a raw public URL.
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(path, expiresIn);
 
-    if (error) throw error;
-    if (!data?.url) {
-      throw new Error(data?.error || 'Could not access document');
-    }
-
-    return data.url;
+  if (error || !data?.signedUrl) {
+    // Fallback to public URL if signed URL fails (e.g. bucket is fully public)
+    return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
   }
 
-  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+  return data.signedUrl;
 }
 
 export async function openDocumentReference(ref: string, fallbackBucket?: string) {

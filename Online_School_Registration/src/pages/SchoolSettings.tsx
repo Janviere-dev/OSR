@@ -192,7 +192,7 @@ const SchoolSettings = () => {
       <div className="min-h-screen flex w-full bg-gradient-to-br from-secondary/30 via-background to-background">
         <SchoolSidebar school={school} />
         <main className="flex-1 p-6 lg:p-8 overflow-auto">
-          <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
+          <div className="space-y-8 animate-fade-in">
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary to-primary/80 p-6 lg:p-8 text-primary-foreground shadow-xl">
               <div className="relative">
                 <h1 className="text-3xl lg:text-4xl font-display font-bold tracking-tight">{t('school.settings.title')}</h1>

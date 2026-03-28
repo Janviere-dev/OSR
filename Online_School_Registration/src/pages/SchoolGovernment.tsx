@@ -6,7 +6,7 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { SchoolSidebar } from '@/components/school/SchoolSidebar';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Download, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { Loader2, Download, ChevronDown, ChevronRight, ExternalLink, FileSpreadsheet } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +16,7 @@ import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import govLogo from '@/assets/gov-logo.png';
 import * as XLSX from 'xlsx';
-import { splitStoredReferences, getAccessibleDocumentUrl, openDocumentReference } from '@/lib/document-access';
+import { splitStoredReferences, openDocumentReference, getAccessibleDocumentUrl } from '@/lib/document-access';
 
 const allGrades = [
   'Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6',
@@ -136,67 +136,160 @@ const SchoolGovernment = () => {
     });
   };
 
-  const exportClassToExcel = async (grade: string, stream: string, classStudents: Student[]) => {
-    // Generate signed URLs for all transcripts first
-    const headers = ['Student ID', 'Name', 'Date of Birth', 'Mother Name', 'Mother Phone', 'Father Name', 'Father Phone', 'Email', 'Grade'];
-    
-    // Find max transcript count
-    let maxTranscripts = 0;
-    classStudents.forEach(s => {
-      const refs = transcriptMap[s.id] || [];
-      if (refs.length > maxTranscripts) maxTranscripts = refs.length;
-    });
-    for (let i = 0; i < Math.max(maxTranscripts, 1); i++) {
-      headers.push(`Transcript ${i + 1}`);
-    }
-
-    const rows: string[][] = [];
-    for (const s of classStudents) {
-      const refs = transcriptMap[s.id] || [];
-      const urls: string[] = [];
-      for (const ref of refs) {
-        try {
-          const url = await getAccessibleDocumentUrl(ref, 'student-documents');
-          urls.push(url);
-        } catch {
-          urls.push('');
-        }
+  const resolveTranscriptLinks = async (studentList: Student[], tMap: Record<string, string[]>) => {
+    const resolved: Record<string, string | null> = {};
+    await Promise.all(studentList.map(async (s) => {
+      const refs = tMap[s.id] ?? [];
+      if (refs.length === 0) { resolved[s.id] = null; return; }
+      try {
+        resolved[s.id] = await getAccessibleDocumentUrl(refs[0], 'student-documents');
+      } catch {
+        resolved[s.id] = null;
       }
-      rows.push([
+    }));
+    return resolved;
+  };
+
+  const buildClassSheet = async (_grade: string, stream: string, classStudents: Student[], tMap?: Record<string, string[]>) => {
+    const headers = [
+      'Student ID', 'Full Name', 'Date of Birth', 'Grade', 'Class',
+      'Mother Name', 'Mother Phone', 'Father Name', 'Father Phone',
+      'Parent Email', 'Enrollment Status', 'Transcripts',
+    ];
+    const TRANSCRIPT_COL = headers.length - 1; // index 11
+
+    const map = tMap ?? transcriptMap;
+    const resolvedUrls = await resolveTranscriptLinks(classStudents, map);
+
+    const rows: (string | number)[][] = classStudents.map(s => {
+      const refs = map[s.id] ?? [];
+      const transcriptLabel = refs.length === 0 ? ''
+        : refs.length === 1 ? 'View Transcript'
+        : refs.map((_, i) => `Transcript ${i + 1}`).join('\n');
+      return [
         s.student_id_code || '',
         s.name,
         format(new Date(s.dob), 'yyyy-MM-dd'),
+        s.current_grade || '',
+        stream === '-' ? '' : stream,
         s.mother_name || '',
         s.mother_phone || s.parent_phone || '',
         s.father_name || '',
         s.father_phone || '',
         s.parent_email || '',
-        s.current_grade || '',
-        ...urls,
-      ]);
-    }
+        s.status || '',
+        transcriptLabel,
+      ];
+    });
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    ws['!cols'] = headers.map((_, i) => ({ wch: Math.max(headers[i].length, ...rows.map(r => String(r[i] || '').length)) + 2 }));
-    
-    // Make transcript cells into hyperlinks
-    const headerCount = 9; // columns before transcripts
-    rows.forEach((row, ri) => {
-      for (let ti = headerCount; ti < row.length; ti++) {
-        if (row[ti]) {
-          const cellRef = XLSX.utils.encode_cell({ r: ri + 1, c: ti });
-          if (ws[cellRef]) {
-            ws[cellRef].l = { Target: row[ti], Tooltip: `Transcript ${ti - headerCount + 1}` };
-            ws[cellRef].v = `View Transcript ${ti - headerCount + 1}`;
-          }
-        }
+
+    // Embed hyperlinks + wrap text on the Transcripts column
+    classStudents.forEach((s, rowIdx) => {
+      const url = resolvedUrls[s.id];
+      const cellRef = XLSX.utils.encode_cell({ r: rowIdx + 1, c: TRANSCRIPT_COL });
+      if (ws[cellRef]) {
+        if (url) ws[cellRef].l = { Target: url, Tooltip: 'Click to open transcript' };
+        ws[cellRef].s = { alignment: { wrapText: true, vertical: 'top' } };
       }
     });
 
+    // Column widths — transcript col fixed wider for readability
+    ws['!cols'] = headers.map((h, i) => ({
+      wch: i === TRANSCRIPT_COL ? 20 : Math.max(h.length, ...rows.map(r => String(r[i] || '').length), 12) + 2,
+    }));
+
+    // Bold header row
+    for (let c = 0; c < headers.length; c++) {
+      const ref = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws[ref]) ws[ref].s = { font: { bold: true } };
+    }
+
+    return ws;
+  };
+
+  const exportAllToSDMS = async () => {
+    if (groupedData.length === 0) return;
+    toast({ title: 'Preparing SDMS export…', description: 'Building all class sheets.' });
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `${grade} ${stream}`);
-    XLSX.writeFile(wb, `${grade}_Class_${stream}_students.xlsx`);
-    toast({ title: t('gov.exportComplete'), description: `${grade} ${t('gov.class')} ${stream} ${t('gov.exported')}` });
+
+    // Summary sheet — all students across all classes
+    const summaryHeaders = [
+      'Student ID', 'Full Name', 'Date of Birth', 'Grade', 'Class',
+      'Mother Name', 'Mother Phone', 'Father Name', 'Father Phone',
+      'Parent Email', 'Enrollment Status', 'Transcripts',
+    ];
+    const SUMMARY_TRANSCRIPT_COL = summaryHeaders.length - 1;
+
+    const sortedStudents = students
+      .filter(s => s.student_id_code)
+      .sort((a, b) => {
+        const gradeOrder = allGrades.indexOf(a.current_grade || '') - allGrades.indexOf(b.current_grade || '');
+        if (gradeOrder !== 0) return gradeOrder;
+        return (a.class_stream || '').localeCompare(b.class_stream || '');
+      });
+
+    const summaryResolvedUrls = await resolveTranscriptLinks(sortedStudents, transcriptMap);
+
+    const summaryRows: (string | number)[][] = sortedStudents.map(s => {
+      const refs = transcriptMap[s.id] ?? [];
+      return [
+        s.student_id_code || '',
+        s.name,
+        format(new Date(s.dob), 'yyyy-MM-dd'),
+        s.current_grade || '',
+        s.class_stream || '',
+        s.mother_name || '',
+        s.mother_phone || s.parent_phone || '',
+        s.father_name || '',
+        s.father_phone || '',
+        s.parent_email || '',
+        s.status || '',
+        refs.length === 0 ? ''
+          : refs.length === 1 ? 'View Transcript'
+          : refs.map((_, i) => `Transcript ${i + 1}`).join('\n'),
+      ];
+    });
+
+    const summaryWs = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows]);
+
+    // Embed hyperlinks + wrap text on Transcripts column in summary sheet
+    sortedStudents.forEach((s, rowIdx) => {
+      const url = summaryResolvedUrls[s.id];
+      const cellRef = XLSX.utils.encode_cell({ r: rowIdx + 1, c: SUMMARY_TRANSCRIPT_COL });
+      if (summaryWs[cellRef]) {
+        if (url) summaryWs[cellRef].l = { Target: url, Tooltip: 'Click to open transcript' };
+        summaryWs[cellRef].s = { alignment: { wrapText: true, vertical: 'top' } };
+      }
+    });
+
+    summaryWs['!cols'] = summaryHeaders.map((h, i) => ({
+      wch: i === SUMMARY_TRANSCRIPT_COL ? 20 : Math.max(h.length, ...summaryRows.map(r => String(r[i] || '').length), 12) + 2,
+    }));
+    // Bold header
+    for (let c = 0; c < summaryHeaders.length; c++) {
+      const ref = XLSX.utils.encode_cell({ r: 0, c });
+      if (summaryWs[ref]) summaryWs[ref].s = { font: { bold: true } };
+    }
+    XLSX.utils.book_append_sheet(wb, summaryWs, 'All Students');
+
+    // One sheet per class (grade + stream)
+    for (const { grade, streams } of groupedData) {
+      for (const { stream, students: classStudents } of streams) {
+        if (classStudents.length === 0) continue;
+        const ws = await buildClassSheet(grade, stream, classStudents);
+        const sheetName = `${grade.replace('Primary ', 'P').replace('Secondary ', 'S')} ${stream}`.slice(0, 31);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      }
+    }
+
+    const fileName = `${school?.name || 'School'}_SDMS_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    toast({
+      title: 'SDMS Export Complete',
+      description: `${fileName} — ${students.length} students across ${groupedData.reduce((n, g) => n + g.streams.length, 0)} classes.`,
+    });
   };
 
   if (authLoading || schoolLoading) {
@@ -217,7 +310,7 @@ const SchoolGovernment = () => {
         <SchoolSidebar school={school} />
         <main className="flex-1 p-6 lg:p-8 overflow-auto">
           <div className="space-y-6 animate-fade-in">
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[hsl(200,80%,45%)] via-[hsl(200,80%,50%)] to-[hsl(200,80%,55%)] p-6 text-white shadow-xl">
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary to-primary/80 p-6 text-primary-foreground shadow-xl">
               <div className="flex items-center gap-4">
                 <img src={govLogo} alt="Ministry of Education" className="w-16 h-16 object-contain rounded-lg bg-white/10 p-1" />
                 <div>
@@ -227,6 +320,20 @@ const SchoolGovernment = () => {
                 </div>
               </div>
             </div>
+
+            {/* SDMS export button */}
+            {!studentsLoading && groupedData.length > 0 && (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-foreground">SDMS Report — {school.name}</p>
+                  <p className="text-sm text-muted-foreground">{students.length} enrolled students · ready for School Data Management System</p>
+                </div>
+                <Button onClick={exportAllToSDMS} className="gap-2">
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Export Full SDMS Report
+                </Button>
+              </div>
+            )}
 
             {studentsLoading ? (
               <div className="flex justify-center py-12">
@@ -265,13 +372,18 @@ const SchoolGovernment = () => {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={(e) => {
+                                    onClick={async (e) => {
                                       e.stopPropagation();
-                                      exportClassToExcel(grade, stream, classStudents);
+                                      const ws = await buildClassSheet(grade, stream, classStudents);
+                                      const wb = XLSX.utils.book_new();
+                                      const sheetName = `${grade.replace('Primary ', 'P').replace('Secondary ', 'S')} ${stream}`.slice(0, 31);
+                                      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+                                      XLSX.writeFile(wb, `${grade}_Class_${stream}_SDMS.xlsx`);
+                                      toast({ title: 'Class exported', description: `${grade} Class ${stream}` });
                                     }}
                                   >
                                     <Download className="w-4 h-4 mr-1" />
-                                    {t('gov.exportExcel')}
+                                    Export Class
                                   </Button>
                                 </div>
                               </CollapsibleTrigger>

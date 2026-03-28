@@ -15,10 +15,10 @@ interface DocumentUploadProps {
 export function DocumentUpload({
   files,
   onFilesChange,
-  accept = '.pdf,.jpg,.jpeg,.png,.docx',
+  accept = '.pdf',
   multiple = true,
   label = 'Upload Documents',
-  hint = 'Supported: PDF, Images, DOCX',
+  hint = 'Supported: PDF only (max 10MB per file)',
   maxSizeMB = 10,
 }: DocumentUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);

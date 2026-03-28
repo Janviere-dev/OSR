@@ -6,7 +6,7 @@ import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { UserPlus, ArrowRightLeft, CreditCard, Users, MessageSquare } from 'lucide-react';
+import { ArrowLeft, UserPlus, ArrowRightLeft, CreditCard, Users, MessageSquare } from 'lucide-react';
 import RegisterStudentForm from '@/components/parent/RegisterStudentForm';
 import TransferStudentForm from '@/components/parent/TransferStudentForm';
 import PaymentForm from '@/components/parent/PaymentForm';
@@ -77,7 +77,7 @@ const ParentDashboard = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="text-center">
-                  <Button className="w-full">{t('dashboard.startRegistration')}</Button>
+<Button className="w-full">{t('dashboard.startRegistration')} <ArrowLeft className="ml-2 w-4 h-4 rotate-180" /></Button>
                 </CardContent>
               </Card>
 
@@ -93,7 +93,7 @@ const ParentDashboard = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="text-center">
-                  <Button variant="secondary" className="w-full">{t('dashboard.startTransfer')}</Button>
+<Button variant="secondary" className="w-full">{t('dashboard.startTransfer')} <ArrowLeft className="ml-2 w-4 h-4 rotate-180" /></Button>
                 </CardContent>
               </Card>
 
@@ -109,7 +109,7 @@ const ParentDashboard = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="text-center">
-                  <Button variant="outline" className="w-full">{t('dashboard.submitPayment')}</Button>
+<Button variant="outline" className="w-full">{t('dashboard.submitPayment')} <ArrowLeft className="ml-2 w-4 h-4 rotate-180" /></Button>
                 </CardContent>
               </Card>
 
@@ -125,7 +125,7 @@ const ParentDashboard = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="text-center">
-                  <Button variant="ghost" className="w-full">{t('dashboard.viewStudents')}</Button>
+<Button variant="ghost" className="w-full">{t('dashboard.viewStudents')} <ArrowLeft className="ml-2 w-4 h-4 rotate-180" /></Button>
                 </CardContent>
               </Card>
 
@@ -141,7 +141,7 @@ const ParentDashboard = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="text-center">
-                  <Button variant="outline" className="w-full">{t('dashboard.openInbox')}</Button>
+<Button variant="outline" className="w-full">{t('dashboard.openInbox')} <ArrowLeft className="ml-2 w-4 h-4 rotate-180" /></Button>
                 </CardContent>
               </Card>
             </div>
@@ -154,6 +154,14 @@ const ParentDashboard = () => {
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
       <main className="flex-1 container mx-auto px-4 py-8">
+        {activeView !== 'dashboard' && (
+          <div className="mb-4">
+            <Button variant="ghost" size="sm" onClick={() => setActiveView('dashboard')} className="gap-2 text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="w-4 h-4" />
+              {t('common.back')}
+            </Button>
+          </div>
+        )}
         {renderContent()}
       </main>
       <Footer />

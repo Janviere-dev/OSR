@@ -134,7 +134,7 @@ export function NewApplicationsTab({ applications, schoolId }: NewApplicationsTa
       const { error: studentError } = await supabase
         .from('students')
         .update({
-          status: 'pending',
+          status: 'enrolled',
           class_stream: classStream,
           current_grade: grade,
           student_id_code: studentIdCode,
@@ -160,9 +160,13 @@ export function NewApplicationsTab({ applications, schoolId }: NewApplicationsTa
       if (selectedApp && user) {
         const { data: s } = await supabase.from('students').select('parent_id').eq('id', selectedApp.students.id).single();
         if (s) {
-          let content = `🎉 Application approved! Student ID: ${studentIdCode}.`;
-          if (school?.requirements_pdf_url) {
-            content += `\n\n📄 School Requirements: ${school.requirements_pdf_url}\n\nPlease review and proceed with payment.`;
+          const { createDocumentMarker } = await import('@/lib/document-access');
+          const reqRefs = school?.requirements_pdf_url
+            ? school.requirements_pdf_url.split(',').map((r: string) => r.trim()).filter(Boolean)
+            : [];
+          let content = `🎉 Application approved!\n\n${selectedApp.students.name} (ID: ${studentIdCode}) has been accepted.\n\nPlease proceed with payment of school fees.`;
+          if (reqRefs.length > 0) {
+            content += `\n\n${createDocumentMarker('school-documents', 'View School Requirements', reqRefs)}`;
           }
           await sendSystemMessage({ senderId: user.id, receiverId: s.parent_id, applicationId: selectedApp.id, content });
         }

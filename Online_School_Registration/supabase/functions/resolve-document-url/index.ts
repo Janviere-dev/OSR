@@ -45,21 +45,26 @@ serve(async (req) => {
     const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    // Standard Supabase edge function auth pattern:
+    // Use a user-scoped client (anon key + user's Bearer token) to verify identity
+    const supabaseUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
+    const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
 
-    if (claimsError || !claimsData?.claims?.sub) {
+    if (userError || !user?.id) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const userId = claimsData.claims.sub;
+    const userId = user.id;
+
+    // Admin client for privileged DB + storage operations
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
     const { ref, bucket: rawBucket, path: rawPath, expiresIn = 3600 } = await req.json();
 
     const parsed = ref ? parseStorageRef(ref, rawBucket) : { bucket: rawBucket ?? null, path: rawPath ?? '' };
@@ -80,10 +85,10 @@ serve(async (req) => {
       });
     }
 
-    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
+    // Allow if the file belongs to this user
     let allowed = path.startsWith(`${userId}/`);
 
+    // Allow if the user is a school admin whose school has this document
     if (!allowed) {
       const { data: schools, error: schoolsError } = await supabaseAdmin
         .from('schools')
@@ -115,8 +120,8 @@ serve(async (req) => {
         if (paymentsError) throw paymentsError;
 
         allowed =
-          (applications ?? []).some((application) => matchesReference(application.transcripts_url, candidates)) ||
-          (payments ?? []).some((payment) => matchesReference(payment.proof_payment_url, candidates));
+          (applications ?? []).some((app) => matchesReference(app.transcripts_url, candidates)) ||
+          (payments ?? []).some((pay) => matchesReference(pay.proof_payment_url, candidates));
       }
     }
 

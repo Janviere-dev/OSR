@@ -83,7 +83,7 @@ export function ReRegistrationsTab({ applications, schoolId }: ReRegistrationsTa
     mutationFn: async ({ applicationId, studentId, classStream, grade }: { applicationId: string; studentId: string; classStream: string; grade: string }) => {
       const { error: studentError } = await supabase
         .from('students')
-        .update({ class_stream: classStream, current_grade: grade, status: 'pending' as const })
+        .update({ class_stream: classStream, current_grade: grade, status: 'enrolled' as const })
         .eq('id', studentId);
       if (studentError) throw studentError;
 
