@@ -117,7 +117,7 @@ const PaymentForm = ({ onBack }: PaymentFormProps) => {
         uploadedRefs.push(fileName);
       }
 
-      // Create payment record
+      // Create payment record — automatically paid on proof upload
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .insert({
@@ -127,12 +127,19 @@ const PaymentForm = ({ onBack }: PaymentFormProps) => {
           amount: parsedAmount,
           proof_payment_url: uploadedRefs.join(','),
           description: description || null,
-          status: 'pending',
+          status: 'paid',
         })
         .select('id')
         .single();
 
       if (paymentError) throw paymentError;
+
+      // Enroll the student now that payment proof is submitted
+      const { error: enrollError } = await supabase
+        .from('students')
+        .update({ status: 'enrolled' as const })
+        .eq('id', student.id);
+      if (enrollError) throw enrollError;
 
       // Notify school admin
       const schoolAdminId = (student as any).schools.admin_id;
@@ -140,7 +147,7 @@ const PaymentForm = ({ onBack }: PaymentFormProps) => {
         await sendSystemMessage({
           senderId: user.id,
           receiverId: schoolAdminId,
-          content: `💰 Payment proof uploaded for ${(student as any).name} — Amount: ${parsedAmount} RWF.\n\n${createDocumentMarker('student-documents', 'Payment Proof', uploadedRefs)}\n${createPaymentMarker(payment.id)}\nPlease verify the proof and mark it as paid when confirmed.`,
+          content: `💰 Payment proof submitted for ${(student as any).name} — Amount: ${parsedAmount} RWF. Student has been enrolled.\n\n${createDocumentMarker('student-documents', 'Payment Proof', uploadedRefs)}\n${createPaymentMarker(payment.id)}`,
         });
       }
 
