@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { sendSystemMessage } from '@/hooks/useSendSystemMessage';
 import { Eye, CheckCircle, XCircle, Clock, AlertCircle, FileText, Download } from 'lucide-react';
 import { format } from 'date-fns';
-import { openDocumentReference, splitStoredReferences } from '@/lib/document-access';
+import { openDocumentReference, splitStoredReferences, createDocumentMarker } from '@/lib/document-access';
 
 interface ApplicationWithDetails {
   id: string;
@@ -96,9 +96,12 @@ export function ReRegistrationsTab({ applications, schoolId }: ReRegistrationsTa
         const newClass = selectedApp.transfer_reason?.replace('Moving to ', '') || '';
         supabase.from('students').select('parent_id').eq('id', selectedApp.students.id).single().then(({ data: s }) => {
           if (s) {
-            let msg = `🎉 Re-registration approved! ${selectedApp.students.name} (ID: ${selectedApp.students.student_id_code}) has been enrolled in ${newClass} Class ${selectedStream} for the new academic year.`;
+            let msg = `🎉 Re-registration approved! ${selectedApp.students.name} (ID: ${selectedApp.students.student_id_code}) has been enrolled in ${newClass} Class ${selectedStream} for the new academic year.\n\nPlease proceed with payment of school fees.`;
             if (school?.requirements_pdf_url) {
-              msg += `\n\n📄 School Requirements: ${school.requirements_pdf_url}\n\nPlease review and proceed with payment.`;
+              const reqRefs = school.requirements_pdf_url.split(',').map((r: string) => r.trim()).filter(Boolean);
+              if (reqRefs.length > 0) {
+                msg += `\n\n${createDocumentMarker('school-documents', 'View School Requirements', reqRefs)}`;
+              }
             }
             sendSystemMessage({ senderId: user.id, receiverId: s.parent_id, applicationId: selectedApp.id, content: msg });
           }
