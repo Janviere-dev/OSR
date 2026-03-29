@@ -9,17 +9,28 @@ A full-stack web application for managing school registrations, student transfer
 1. [Prerequisites](#1-prerequisites)
 2. [Clone the Project](#2-clone-the-project)
 3. [Supabase Project Setup](#3-supabase-project-setup)
-4. [Storage Buckets](#4-storage-buckets)
-5. [Database Schema](#5-database-schema)
-6. [Row Level Security](#6-row-level-security)
-7. [Environment Variables](#7-environment-variables)
-8. [Install & Run Locally](#8-install--run-locally)
-9. [Deploy the Edge Function](#9-deploy-the-edge-function)
-10. [First Login & Roles](#10-first-login--roles)
-11. [Deploy to Netlify](#11-deploy-to-netlify)
-12. [Project Structure](#12-project-structure)
-13. [Features Overview](#13-features-overview)
-14. [Troubleshooting](#14-troubleshooting)
+4. [Database Setup — SQL Editor](#4-database-setup--sql-editor)
+   - [Query 1 — Core Tables, Enums, RLS & Triggers](#query-1--core-tables-enums-rls--triggers)
+   - [Query 2 — Storage Buckets & Extra Columns](#query-2--storage-buckets--extra-columns)
+   - [Query 3 — Class Stream & School Admin Student Policy](#query-3--class-stream--school-admin-student-policy)
+   - [Query 4 — School Logos Bucket](#query-4--school-logos-bucket)
+   - [Query 5 — School Documents Bucket & Requirements PDF](#query-5--school-documents-bucket--requirements-pdf)
+   - [Query 6 — Payments Table](#query-6--payments-table)
+   - [Query 7 — Fix Payments Update Policy](#query-7--fix-payments-update-policy)
+   - [Query 8 — Payments: Proof URL & Remove Flutterwave Constraints](#query-8--payments-proof-url--remove-flutterwave-constraints)
+   - [Query 9 — Parent Contact Fields on Students](#query-9--parent-contact-fields-on-students)
+   - [Query 10 — Messages Table & Realtime](#query-10--messages-table--realtime)
+   - [Query 11 — Parent Phone Fields on Students](#query-11--parent-phone-fields-on-students)
+   - [Query 12 — Enrolled Status, School Description & Payment Admin Policy](#query-12--enrolled-status-school-description--payment-admin-policy)
+   - [Query 13 — Remove Flutterwave Columns](#query-13--remove-flutterwave-columns)
+5. [Deploy the Edge Function](#5-deploy-the-edge-function)
+6. [Environment Variables](#6-environment-variables)
+7. [Install & Run Locally](#7-install--run-locally)
+8. [First Login & Roles](#8-first-login--roles)
+9. [Deploy to Netlify](#9-deploy-to-netlify)
+10. [Project Structure](#10-project-structure)
+11. [Features Overview](#11-features-overview)
+12. [Troubleshooting](#12-troubleshooting)
 
 ---
 
@@ -58,238 +69,731 @@ For Windows: download the `.exe` from https://github.com/supabase/cli/releases
 ```bash
 git clone <your-repo-url>
 cd Online_School_Registration
+npm install
 ```
 
 ---
 
 ## 3. Supabase Project Setup
 
-### Step 1 — Create a project
+### Step 1 — Create an account and project
 
-1. Go to https://app.supabase.com and sign in (create a free account if needed).
+1. Go to **https://app.supabase.com** and create a free account if you don't have one.
 2. Click **New Project**.
-3. Fill in: name, database password, region. Click **Create new project**.
-4. Wait ~2 minutes for provisioning to complete.
+3. Fill in: project name, database password, and region closest to Rwanda (e.g. `eu-west-1`).
+4. Click **Create new project** and wait ~2 minutes for provisioning to complete.
 
 ### Step 2 — Get your API keys
 
-1. In your project, go to **Settings → API**.
-2. Copy:
+1. In your project dashboard, go to **Settings → API**.
+2. Copy two values:
    - **Project URL** — e.g. `https://xxxxxxxxxxxxxxxxxxxx.supabase.co`
    - **anon / public** key — the long `eyJ…` JWT string
 
-> **Important:** Use the `eyJ…` key (labeled "anon / public"), NOT the `sb_publishable_…` key. The publishable key format does not work with Supabase JS v2.
+> **Important:** Use the `eyJ…` key labeled "anon / public". Do **not** use the `sb_publishable_…` key — that format does not work with Supabase JS v2.
 
 ---
 
-## 4. Storage Buckets
+## 4. Database Setup — SQL Editor
 
-In your Supabase dashboard go to **Storage → New bucket** and create these two:
+All database tables, policies, enums, triggers, and storage buckets are created by running SQL queries directly in the Supabase dashboard.
 
-| Bucket name | Set as Public? | Purpose |
-|-------------|---------------|---------|
-| `student-documents` | ✅ Yes | Transcripts and payment proofs uploaded by parents |
-| `school-documents` | ✅ Yes | Requirement PDFs uploaded by school admins |
+**How to run each query:**
 
-To make a bucket public: click the bucket → **Edit bucket** → enable **Public bucket** → Save.
+1. In your Supabase project, go to **SQL Editor** (left sidebar).
+2. Click **New query**.
+3. Paste the SQL for that query.
+4. Click **Run** (or press `Ctrl+Enter`).
+5. Confirm you see `Success. No rows returned` before moving to the next query.
+
+Run the queries **in order** — each one builds on the previous.
 
 ---
 
-## 5. Database Schema
+### Query 1 — Core Tables, Enums, RLS & Triggers
 
-In your Supabase dashboard go to **SQL Editor → New query**, paste the SQL below, and click **Run**.
+This is the foundation. It creates all enums, the core tables (`profiles`, `user_roles`, `schools`, `students`, `applications`), enables Row Level Security, adds all access policies, timestamp triggers, and the auto-profile trigger on signup.
 
 ```sql
--- Enums
-create type application_type as enum ('new', 'transfer');
+-- Create enum for user roles
+CREATE TYPE public.app_role AS ENUM ('parent', 'school_admin');
 
--- Profiles (synced with auth.users via trigger)
-create table profiles (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  full_name text
+-- Create enum for student status
+CREATE TYPE public.student_status AS ENUM ('pending', 'passed', 'repeat');
+
+-- Create enum for application type
+CREATE TYPE public.application_type AS ENUM ('new', 'transfer');
+
+-- Create profiles table for user data
+CREATE TABLE public.profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+    full_name TEXT,
+    phone TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
--- User roles
-create table user_roles (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  role text not null check (role in ('parent', 'school_admin'))
+-- Create user_roles table for role management
+CREATE TABLE public.user_roles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    role app_role NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    UNIQUE (user_id, role)
 );
 
--- Schools
-create table schools (
-  id uuid primary key default gen_random_uuid(),
-  admin_id uuid references auth.users(id),
-  name text not null,
-  staff_name text,
-  province text,
-  district text,
-  sector text,
-  logo_url text,
-  showcase_image_url text,
-  requirements_pdf_url text,
-  description text,
-  is_approved boolean default true
+-- Create schools table
+CREATE TABLE public.schools (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    logo_url TEXT,
+    province TEXT NOT NULL,
+    district TEXT NOT NULL,
+    sector TEXT NOT NULL,
+    admin_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    staff_name TEXT,
+    qualifications TEXT,
+    is_approved BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
--- Students
-create table students (
-  id uuid primary key default gen_random_uuid(),
-  parent_id uuid references auth.users(id),
-  school_id uuid references schools(id),
-  name text not null,
-  dob date not null,
-  mother_name text,
-  father_name text,
-  mother_phone text,
-  father_phone text,
-  parent_phone text,
-  parent_email text,
-  current_grade text,
-  class_stream text,
-  student_id_code text,
-  status text default 'pending'
+-- Create students table
+CREATE TABLE public.students (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    dob DATE NOT NULL,
+    parent_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    school_id UUID REFERENCES public.schools(id) ON DELETE SET NULL,
+    status student_status NOT NULL DEFAULT 'pending',
+    current_grade TEXT,
+    student_id_code TEXT UNIQUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
--- Applications
-create table applications (
-  id uuid primary key default gen_random_uuid(),
-  student_id uuid references students(id),
-  school_id uuid references schools(id),
-  type application_type default 'new',
-  status text default 'pending',
-  transcripts_url text,
-  proof_payment_url text,
-  momo_id text,
-  previous_school_name text,
-  transfer_reason text,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+-- Create applications table
+CREATE TABLE public.applications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    school_id UUID NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE,
+    type application_type NOT NULL DEFAULT 'new',
+    transcripts_url TEXT,
+    momo_id TEXT,
+    proof_payment_url TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
--- Payments
-create table payments (
-  id uuid primary key default gen_random_uuid(),
-  student_id uuid references students(id),
-  school_id uuid references schools(id),
-  parent_id uuid references auth.users(id),
-  status text default 'unpaid',
-  proof_payment_url text,
-  amount integer,
-  description text,
-  momo_id text,
-  created_at timestamptz default now()
+-- Enable Row Level Security on all tables
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.schools ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
+
+-- Create security definer function to check roles
+CREATE OR REPLACE FUNCTION public.has_role(_user_id UUID, _role app_role)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role = _role
+  )
+$$;
+
+-- Profiles policies
+CREATE POLICY "Users can view their own profile"
+ON public.profiles FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own profile"
+ON public.profiles FOR UPDATE
+TO authenticated
+USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own profile"
+ON public.profiles FOR INSERT
+TO authenticated
+WITH CHECK (auth.uid() = user_id);
+
+-- User roles policies
+CREATE POLICY "Users can view their own roles"
+ON public.user_roles FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own roles during signup"
+ON public.user_roles FOR INSERT
+TO authenticated
+WITH CHECK (auth.uid() = user_id);
+
+-- Schools policies (public read for discovery, admin write for their school)
+CREATE POLICY "Anyone can view approved schools"
+ON public.schools FOR SELECT
+TO anon, authenticated
+USING (is_approved = true);
+
+CREATE POLICY "School admins can view their own school"
+ON public.schools FOR SELECT
+TO authenticated
+USING (admin_id = auth.uid());
+
+CREATE POLICY "School admins can update their own school"
+ON public.schools FOR UPDATE
+TO authenticated
+USING (admin_id = auth.uid());
+
+CREATE POLICY "Authenticated users can create schools"
+ON public.schools FOR INSERT
+TO authenticated
+WITH CHECK (admin_id = auth.uid());
+
+-- Students policies (parents can manage their children)
+CREATE POLICY "Parents can view their own children"
+ON public.students FOR SELECT
+TO authenticated
+USING (parent_id = auth.uid());
+
+CREATE POLICY "Parents can insert their own children"
+ON public.students FOR INSERT
+TO authenticated
+WITH CHECK (parent_id = auth.uid());
+
+CREATE POLICY "Parents can update their own children"
+ON public.students FOR UPDATE
+TO authenticated
+USING (parent_id = auth.uid());
+
+CREATE POLICY "School admins can view students in their school"
+ON public.students FOR SELECT
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.schools
+        WHERE schools.id = students.school_id
+        AND schools.admin_id = auth.uid()
+    )
 );
 
--- Messages
-create table messages (
-  id uuid primary key default gen_random_uuid(),
-  sender_id uuid references auth.users(id),
-  receiver_id uuid references auth.users(id),
-  application_id uuid references applications(id),
-  content text not null,
-  is_system boolean default false,
-  is_read boolean default false,
-  created_at timestamptz default now()
+-- Applications policies
+CREATE POLICY "Parents can view their children's applications"
+ON public.applications FOR SELECT
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.students
+        WHERE students.id = applications.student_id
+        AND students.parent_id = auth.uid()
+    )
 );
 
--- Trigger: auto-create profile when a user signs up
-create or replace function handle_new_user()
-returns trigger as $$
-begin
-  insert into public.profiles (user_id, full_name)
-  values (new.id, new.raw_user_meta_data->>'full_name');
-  return new;
-end;
-$$ language plpgsql security definer;
+CREATE POLICY "Parents can create applications for their children"
+ON public.applications FOR INSERT
+TO authenticated
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM public.students
+        WHERE students.id = applications.student_id
+        AND students.parent_id = auth.uid()
+    )
+);
 
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure handle_new_user();
+CREATE POLICY "School admins can view applications to their school"
+ON public.applications FOR SELECT
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.schools
+        WHERE schools.id = applications.school_id
+        AND schools.admin_id = auth.uid()
+    )
+);
+
+CREATE POLICY "School admins can update applications to their school"
+ON public.applications FOR UPDATE
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.schools
+        WHERE schools.id = applications.school_id
+        AND schools.admin_id = auth.uid()
+    )
+);
+
+-- Create function to update timestamps
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SET search_path = public;
+
+-- Create triggers for automatic timestamp updates
+CREATE TRIGGER update_profiles_updated_at
+    BEFORE UPDATE ON public.profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER update_schools_updated_at
+    BEFORE UPDATE ON public.schools
+    FOR EACH ROW
+    EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER update_students_updated_at
+    BEFORE UPDATE ON public.students
+    FOR EACH ROW
+    EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER update_applications_updated_at
+    BEFORE UPDATE ON public.applications
+    FOR EACH ROW
+    EXECUTE FUNCTION public.update_updated_at_column();
+
+-- Create function to handle new user registration (create profile automatically)
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.profiles (user_id, full_name)
+    VALUES (NEW.id, NEW.raw_user_meta_data ->> 'full_name');
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Create trigger to automatically create profile on signup
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_new_user();
 ```
 
 ---
 
-## 6. Row Level Security
+### Query 2 — Storage Buckets & Extra Columns
 
-Still in the **SQL Editor**, run this second query to enable RLS and add access policies:
+Creates the `student-documents` storage bucket and adds extra columns to existing tables.
 
 ```sql
--- Enable RLS on all tables
-alter table profiles enable row level security;
-alter table user_roles enable row level security;
-alter table schools enable row level security;
-alter table students enable row level security;
-alter table applications enable row level security;
-alter table payments enable row level security;
-alter table messages enable row level security;
+-- Create storage bucket for student documents
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('student-documents', 'student-documents', false);
 
--- Profiles
-create policy "Own profile" on profiles for all using (auth.uid() = user_id);
+-- Storage policies for student documents
+CREATE POLICY "Parents can upload documents for their children"
+ON storage.objects FOR INSERT
+WITH CHECK (
+    bucket_id = 'student-documents'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+);
 
--- User roles
-create policy "Own role read" on user_roles for select using (auth.uid() = user_id);
-create policy "Own role insert" on user_roles for insert with check (auth.uid() = user_id);
+CREATE POLICY "Parents can view their own documents"
+ON storage.objects FOR SELECT
+USING (
+    bucket_id = 'student-documents'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+);
 
--- Schools: anyone can read, admin manages their own
-create policy "Schools public read" on schools for select using (true);
-create policy "School admin insert" on schools for insert with check (auth.uid() = admin_id);
-create policy "School admin update" on schools for update using (auth.uid() = admin_id);
+CREATE POLICY "Parents can update their own documents"
+ON storage.objects FOR UPDATE
+USING (
+    bucket_id = 'student-documents'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+);
 
--- Students
-create policy "Parent owns students" on students for all
-  using (auth.uid() = parent_id);
-create policy "School reads students" on students for select
-  using (school_id in (select id from schools where admin_id = auth.uid()));
-create policy "School updates students" on students for update
-  using (school_id in (select id from schools where admin_id = auth.uid()));
+CREATE POLICY "Parents can delete their own documents"
+ON storage.objects FOR DELETE
+USING (
+    bucket_id = 'student-documents'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+);
 
--- Applications
-create policy "Parent applications" on applications for all
-  using (student_id in (select id from students where parent_id = auth.uid()));
-create policy "School applications" on applications for all
-  using (school_id in (select id from schools where admin_id = auth.uid()));
+-- Add phone to profiles table
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone text;
 
--- Payments
-create policy "Parent payments" on payments for all using (auth.uid() = parent_id);
-create policy "School payments" on payments for all
-  using (school_id in (select id from schools where admin_id = auth.uid()));
+-- Add parent name fields to students table
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS mother_name text;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS father_name text;
 
--- Messages
-create policy "Own messages" on messages for all
-  using (auth.uid() = sender_id or auth.uid() = receiver_id);
+-- Add transfer fields to applications table
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS previous_school_name text;
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS transfer_reason text;
 ```
 
 ---
 
-## 7. Environment Variables
+### Query 3 — Class Stream & School Admin Student Policy
 
-Create a `.env` file in the project root:
+Adds the `class_stream` column to students and a policy allowing school admins to update students enrolled in their school.
+
+```sql
+-- Add class/stream field to students table
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS class_stream text;
+
+-- Allow school admins to update students in their school
+CREATE POLICY "School admins can update students in their school"
+ON public.students FOR UPDATE
+USING (
+    EXISTS (
+        SELECT 1 FROM schools
+        WHERE schools.id = students.school_id
+        AND schools.admin_id = auth.uid()
+    )
+);
+```
+
+---
+
+### Query 4 — School Logos Bucket
+
+Creates the public `school-logos` storage bucket for school logo and showcase images.
+
+```sql
+-- Create storage bucket for school logos
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('school-logos', 'school-logos', true);
+
+-- Allow anyone to view school logos (public bucket)
+CREATE POLICY "School logos are publicly accessible"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'school-logos');
+
+-- Allow authenticated users to upload logos during registration
+CREATE POLICY "Users can upload school logos"
+ON storage.objects FOR INSERT
+WITH CHECK (
+    bucket_id = 'school-logos'
+    AND auth.role() = 'authenticated'
+);
+
+-- Allow school admins to update their logos
+CREATE POLICY "School admins can update their logos"
+ON storage.objects FOR UPDATE
+USING (
+    bucket_id = 'school-logos'
+    AND auth.role() = 'authenticated'
+);
+```
+
+---
+
+### Query 5 — School Documents Bucket & Requirements PDF
+
+Creates the public `school-documents` bucket for admission requirement PDFs and adds the `requirements_pdf_url` column to schools.
+
+```sql
+-- Add requirements PDF URL column to schools table
+ALTER TABLE public.schools ADD COLUMN requirements_pdf_url text;
+
+-- Create storage bucket for school requirement documents
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('school-documents', 'school-documents', true);
+
+-- Public read access for school documents
+CREATE POLICY "Anyone can view school documents"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'school-documents');
+
+-- School admins can upload their school's documents
+CREATE POLICY "School admins can upload school documents"
+ON storage.objects FOR INSERT
+WITH CHECK (
+    bucket_id = 'school-documents'
+    AND auth.uid() IS NOT NULL
+);
+
+-- School admins can update their school's documents
+CREATE POLICY "School admins can update school documents"
+ON storage.objects FOR UPDATE
+USING (
+    bucket_id = 'school-documents'
+    AND auth.uid() IS NOT NULL
+);
+
+-- School admins can delete their school's documents
+CREATE POLICY "School admins can delete school documents"
+ON storage.objects FOR DELETE
+USING (
+    bucket_id = 'school-documents'
+    AND auth.uid() IS NOT NULL
+);
+```
+
+---
+
+### Query 6 — Payments Table
+
+Creates the `payments` table with RLS policies and a timestamp trigger.
+
+```sql
+-- Create payments table for tracking school fee payments
+CREATE TABLE public.payments (
+    id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+    student_id UUID NOT NULL REFERENCES public.students(id),
+    parent_id UUID NOT NULL,
+    school_id UUID NOT NULL REFERENCES public.schools(id),
+    amount NUMERIC(10, 2) NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'RWF',
+    flutterwave_tx_ref TEXT NOT NULL UNIQUE,
+    flutterwave_tx_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    payment_method TEXT,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+
+-- Parents can view their own payments
+CREATE POLICY "Parents can view their own payments"
+ON public.payments FOR SELECT
+USING (parent_id = auth.uid());
+
+-- Parents can insert their own payments
+CREATE POLICY "Parents can create payments"
+ON public.payments FOR INSERT
+WITH CHECK (parent_id = auth.uid());
+
+-- School admins can view payments for their school
+CREATE POLICY "School admins can view school payments"
+ON public.payments FOR SELECT
+USING (
+    EXISTS (
+        SELECT 1 FROM schools
+        WHERE schools.id = payments.school_id
+        AND schools.admin_id = auth.uid()
+    )
+);
+
+-- Allow edge function to update payment status (service role)
+CREATE POLICY "Service role can update payments"
+ON public.payments FOR UPDATE
+USING (true)
+WITH CHECK (true);
+
+-- Trigger for updated_at
+CREATE TRIGGER update_payments_updated_at
+BEFORE UPDATE ON public.payments
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
+```
+
+---
+
+### Query 7 — Fix Payments Update Policy
+
+Replaces the overly permissive service-role update policy with a scoped one that only allows parents to update their own pending payments.
+
+```sql
+-- Drop the overly permissive update policy
+DROP POLICY "Service role can update payments" ON public.payments;
+
+-- Create a properly scoped update policy
+CREATE POLICY "Parents can update their own pending payments"
+ON public.payments FOR UPDATE
+USING (parent_id = auth.uid());
+```
+
+---
+
+### Query 8 — Payments: Proof URL & Remove Flutterwave Constraints
+
+Adds the `proof_payment_url` column for manual payment proof uploads and makes the Flutterwave fields nullable (payment gateway was replaced with manual proof upload).
+
+```sql
+-- Add proof_payment_url to payments table
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS proof_payment_url text;
+
+-- Make flutterwave_tx_ref nullable (no longer required)
+ALTER TABLE public.payments ALTER COLUMN flutterwave_tx_ref DROP NOT NULL;
+ALTER TABLE public.payments ALTER COLUMN flutterwave_tx_ref SET DEFAULT NULL;
+
+-- Add description default
+ALTER TABLE public.payments ALTER COLUMN description SET DEFAULT NULL;
+```
+
+---
+
+### Query 9 — Parent Contact Fields on Students
+
+Adds parent phone and email directly on the student record for easier access by school admins.
+
+```sql
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS parent_phone text;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS parent_email text;
+```
+
+---
+
+### Query 10 — Messages Table & Realtime
+
+Creates the `messages` table for the two-way chat inbox between parents and school admins, with RLS policies and Supabase Realtime enabled.
+
+```sql
+-- Create messages table for chat between parents and school admins
+CREATE TABLE public.messages (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    sender_id uuid NOT NULL,
+    receiver_id uuid NOT NULL,
+    application_id uuid REFERENCES public.applications(id) ON DELETE CASCADE,
+    content text NOT NULL,
+    is_system boolean NOT NULL DEFAULT false,
+    is_read boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
+-- Users can see messages they sent or received
+CREATE POLICY "Users can view their own messages"
+ON public.messages FOR SELECT TO authenticated
+USING (sender_id = auth.uid() OR receiver_id = auth.uid());
+
+-- Users can insert messages where they are the sender
+CREATE POLICY "Users can send messages"
+ON public.messages FOR INSERT TO authenticated
+WITH CHECK (sender_id = auth.uid());
+
+-- Users can update messages they received (mark as read)
+CREATE POLICY "Users can mark received messages as read"
+ON public.messages FOR UPDATE TO authenticated
+USING (receiver_id = auth.uid());
+
+-- Enable realtime on messages table
+ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+```
+
+---
+
+### Query 11 — Parent Phone Fields on Students
+
+Adds mother and father phone number columns to the students table.
+
+```sql
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS mother_phone text;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS father_phone text;
+```
+
+---
+
+### Query 12 — Enrolled Status, School Description & Payment Admin Policy
+
+Adds the `enrolled` value to the student status enum, adds `description` and `showcase_image_url` columns to schools, and adds a policy so school admins can update payments for their school (needed for the Mark as Paid flow).
+
+```sql
+-- Add 'enrolled' to the student_status enum
+ALTER TYPE public.student_status ADD VALUE IF NOT EXISTS 'enrolled';
+
+-- Add description and showcase image to schools
+ALTER TABLE public.schools
+    ADD COLUMN IF NOT EXISTS description text,
+    ADD COLUMN IF NOT EXISTS showcase_image_url text;
+
+-- Allow school admins to update payments for their school
+CREATE POLICY "School admins can update school payments"
+ON public.payments FOR UPDATE
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.schools
+        WHERE schools.id = payments.school_id
+          AND schools.admin_id = auth.uid()
+    )
+)
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM public.schools
+        WHERE schools.id = payments.school_id
+          AND schools.admin_id = auth.uid()
+    )
+);
+```
+
+---
+
+### Query 13 — Remove Flutterwave Columns
+
+Removes the unused Flutterwave payment gateway columns (payment was switched to manual proof-of-payment upload).
+
+```sql
+ALTER TABLE public.payments DROP COLUMN IF EXISTS flutterwave_tx_ref;
+ALTER TABLE public.payments DROP COLUMN IF EXISTS flutterwave_tx_id;
+```
+
+---
+
+## 5. Deploy the Edge Function
+
+The `resolve-document-url` edge function generates time-limited signed URLs so users can securely open uploaded documents.
+
+### Step 1 — Log in to Supabase CLI
 
 ```bash
-# In the Online_School_Registration/ folder:
-touch .env
+supabase login
+# A browser window opens — authenticate and return to the terminal
 ```
 
-Add the following (replace the placeholders with your actual values from step 3):
+### Step 2 — Link your project
+
+Run this from inside the `Online_School_Registration/` folder:
+
+```bash
+supabase link --project-ref YOUR_PROJECT_REF
+```
+
+`YOUR_PROJECT_REF` is the string between `https://` and `.supabase.co` in your project URL.
+
+### Step 3 — Deploy the function
+
+```bash
+supabase functions deploy resolve-document-url
+```
+
+Expected output:
+```
+Deployed Function resolve-document-url on project YOUR_PROJECT_REF
+```
+
+The environment variables `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are automatically injected by Supabase — no manual configuration needed.
+
+---
+
+## 6. Environment Variables
+
+Create a `.env` file inside the `Online_School_Registration/` folder:
 
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-The `.env` file is listed in `.gitignore` and will never be committed.
+Replace both values with the ones copied from **Supabase → Settings → API**.
+
+The `.env` file is listed in `.gitignore` and will never be committed to Git.
 
 ---
 
-## 8. Install & Run Locally
+## 7. Install & Run Locally
 
 ```bash
-# From inside the project folder:
+# From inside the Online_School_Registration/ folder:
 npm install
 npm run dev
 ```
 
-Open your browser at **http://localhost:5173**
+Open **http://localhost:5173** in your browser.
 
 ### Other commands
 
@@ -302,62 +806,25 @@ npm run lint        # Run ESLint
 
 ---
 
-## 9. Deploy the Edge Function
-
-The edge function `resolve-document-url` creates signed URLs for private documents.
-
-### Step 1 — Log in to Supabase CLI
-
-```bash
-supabase login
-# A browser window will open for authentication
-```
-
-### Step 2 — Link your project
-
-```bash
-# Run this from inside the project folder
-supabase link --project-ref YOUR_PROJECT_REF
-```
-
-`YOUR_PROJECT_REF` is the part of your Supabase URL between `https://` and `.supabase.co`.
-
-### Step 3 — Deploy
-
-```bash
-supabase functions deploy resolve-document-url
-```
-
-Expected output:
-```
-Deployed Function resolve-document-url on project YOUR_PROJECT_REF
-```
-
-The environment variables `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are automatically injected by Supabase — no manual setup required.
-
----
-
-## 10. First Login & Roles
+## 8. First Login & Roles
 
 1. Open http://localhost:5173
 2. Click **Sign Up**
 3. Select your role:
-   - **Parent** — register and manage your children's school applications
-   - **School Administrator** — manage a school, review applications, export SDMS reports
-4. School admins will be prompted to complete their school profile on first login
+   - **Parent** — register and manage your children's school applications, upload payment proof, chat with school admins
+   - **School Administrator** — manage your school profile, review and approve applications, manage students, export SDMS reports
+4. School admins are prompted to complete their school profile on first login
 
 ---
 
-## 11. Deploy to Netlify
+## 9. Deploy to Netlify
 
 The project already includes `netlify.toml` and `public/_redirects` for SPA routing.
 
-### Steps
-
-1. Push your code to GitHub/GitLab.
-2. Go to https://app.netlify.com → **Add new site → Import from Git**.
+1. Push your code to GitHub.
+2. Go to **https://app.netlify.com** → **Add new site → Import from Git**.
 3. Select your repository.
-4. Netlify auto-detects the build settings from `netlify.toml`:
+4. Netlify auto-detects build settings from `netlify.toml`:
    - Build command: `npm run build`
    - Publish directory: `dist`
 5. Go to **Site settings → Environment variables** and add:
@@ -365,21 +832,26 @@ The project already includes `netlify.toml` and `public/_redirects` for SPA rout
    - `VITE_SUPABASE_ANON_KEY`
 6. Click **Deploy site**.
 
-After deploy, also redeploy the edge function pointing to production (same `supabase functions deploy` command works as long as you're linked to the production project).
+After the first deploy, redeploy the edge function pointing to production:
+
+```bash
+supabase link --project-ref YOUR_PROJECT_REF
+supabase functions deploy resolve-document-url
+```
 
 ---
 
-## 12. Project Structure
+## 10. Project Structure
 
 ```
 Online_School_Registration/
 ├── public/
-│   └── _redirects              # Netlify SPA redirect rule
+│   └── _redirects                  # Netlify SPA redirect rule
 ├── src/
-│   ├── assets/                 # Images (gov-logo.png, etc.)
+│   ├── assets/                     # Images (gov-logo.png, etc.)
 │   ├── components/
 │   │   ├── chat/
-│   │   │   └── ChatInbox.tsx   # Real-time messaging UI
+│   │   │   └── ChatInbox.tsx       # Real-time messaging UI
 │   │   ├── parent/
 │   │   │   ├── RegisterStudentForm.tsx
 │   │   │   ├── TransferStudentForm.tsx
@@ -391,18 +863,20 @@ Online_School_Registration/
 │   │   │   ├── ReRegistrationsTab.tsx
 │   │   │   ├── StudentManagementTab.tsx
 │   │   │   └── SchoolSidebar.tsx
-│   │   └── ui/                 # Shadcn/Radix UI components
+│   │   ├── SchoolCard.tsx          # School discovery card + details dialog
+│   │   ├── SchoolDiscovery.tsx     # School search and filter
+│   │   └── ui/                     # Shadcn/Radix UI components
 │   ├── contexts/
-│   │   ├── AuthContext.tsx      # Auth state and role management
-│   │   └── LanguageContext.tsx  # EN / Kinyarwanda translations
+│   │   ├── AuthContext.tsx         # Auth state and role management
+│   │   └── LanguageContext.tsx     # English / Kinyarwanda translations
 │   ├── hooks/
 │   │   └── useSendSystemMessage.ts
 │   ├── integrations/
 │   │   └── supabase/
-│   │       ├── client.ts       # Supabase client setup
-│   │       └── types.ts        # Auto-generated DB types
+│   │       ├── client.ts           # Supabase client setup
+│   │       └── types.ts            # Auto-generated DB types
 │   ├── lib/
-│   │   └── document-access.ts  # Signed URL helpers & message markers
+│   │   └── document-access.ts      # Signed URL helpers & message markers
 │   ├── pages/
 │   │   ├── Index.tsx
 │   │   ├── Auth.tsx
@@ -410,16 +884,16 @@ Online_School_Registration/
 │   │   ├── SchoolDashboard.tsx
 │   │   ├── SchoolApplications.tsx
 │   │   ├── SchoolStudents.tsx
-│   │   ├── SchoolGovernment.tsx  # SDMS export
+│   │   ├── SchoolGovernment.tsx    # SDMS Excel export
 │   │   ├── SchoolSettings.tsx
 │   │   └── SchoolInbox.tsx
 │   └── data/
-│       └── rwanda-locations.ts   # Provinces, districts, sectors
+│       └── rwanda-locations.ts     # Provinces, districts, sectors
 ├── supabase/
 │   └── functions/
 │       └── resolve-document-url/
-│           └── index.ts          # Edge function (Deno)
-├── .env                          # Local secrets — never commit this
+│           └── index.ts            # Edge function (Deno) — signed document URLs
+├── .env                            # Local secrets — never commit this
 ├── netlify.toml
 ├── package.json
 ├── tailwind.config.js
@@ -429,39 +903,42 @@ Online_School_Registration/
 
 ---
 
-## 13. Features Overview
+## 11. Features Overview
 
 | Feature | Who uses it |
 |---------|------------|
-| School discovery & details | Everyone (public) |
+| School discovery, search & filter by location | Everyone (public) |
+| View school details, showcase image, requirements PDF | Everyone (public) |
 | Register new student | Parent |
 | Transfer student to another school | Parent |
 | Re-register for new academic year | Parent |
 | Upload payment proof (PDF) | Parent |
-| Student Hub — view all children & status | Parent |
-| Review & approve/reject applications | School Admin |
+| Student Hub — view all children, search by ID, check status | Parent |
+| Review & approve / reject applications | School Admin |
 | Assign grade, class stream, generate student ID | School Admin |
 | Student Management — class sheets, clear for new year | School Admin |
-| Chat Inbox — real-time messaging with read receipts | Both |
-| Government Portal — SDMS Excel export (all classes) | School Admin |
+| Export class list as PDF | School Admin |
+| Chat Inbox — real-time two-way messaging with read receipts | Parent + School Admin |
+| Government Portal — SDMS Excel export (per class + full school) | School Admin |
+| School Settings — logo, showcase image, description, requirements PDF | School Admin |
 | Bilingual UI — English & Kinyarwanda | Everyone |
 
 ---
 
-## 14. Troubleshooting
+## 12. Troubleshooting
 
 ### App loads but Supabase calls fail
 - Check `.env` has the correct `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
 - Make sure you used the `eyJ…` JWT key, not `sb_publishable_…`
-- Restart the dev server after editing `.env`
+- Restart the dev server after editing `.env`: `npm run dev`
 
 ### Sign in works but old session shows errors
 - Open browser dev tools → Application → Local Storage
 - Delete all keys starting with `osr-auth` and reload the page
 - Sign in again
 
-### Documents won't open (401 error)
-- Make sure both storage buckets are set to **Public** in Supabase → Storage
+### Documents won't open (401 or permission error)
+- Make sure `student-documents` is set to public in Supabase → Storage → Edit bucket
 - Redeploy the edge function: `supabase functions deploy resolve-document-url`
 - Sign out and sign back in to refresh the session token
 
@@ -471,5 +948,9 @@ Online_School_Registration/
 - Redeploy with **Clear cache and deploy site**
 
 ### Edge function returns 500
-- Check function logs in Supabase dashboard → Edge Functions → resolve-document-url → Logs
-- Make sure `SUPABASE_SERVICE_ROLE_KEY` is available (it is auto-injected by Supabase)
+- Check logs in Supabase dashboard → **Edge Functions → resolve-document-url → Logs**
+- `SUPABASE_SERVICE_ROLE_KEY` is auto-injected by Supabase — no manual setup needed
+
+### "duplicate key value" error when running SQL queries
+- You may have already run that query. Check **Table Editor** to confirm the table or column exists before re-running.
+- For enums, use `ADD VALUE IF NOT EXISTS` (already included in Query 12).
