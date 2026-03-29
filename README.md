@@ -1,4 +1,4 @@
-# Online School Registration (OSR) — Rwanda
+# Online School Registration (OSR) Rwanda
 
 A full-stack web application for managing school registrations, student transfers, payments, and government reporting across Rwanda. Built with React, Vite, Supabase, and Tailwind CSS.
 
@@ -913,8 +913,8 @@ Online_School_Registration/
 | Transfer student to another school | Parent |
 | Re-register for new academic year | Parent |
 | Upload payment proof (PDF) | Parent |
-| Student Hub — view all children, search by ID, check status | Parent |
-| Review & approve / reject applications | School Admin |
+| Student Hub: view all children, search by ID, check status | Parent |
+| Review and approve / reject applications | School Admin |
 | Assign grade, class stream, generate student ID | School Admin |
 | Student Management:  class sheets, clear for new year | School Admin |
 | Export class list as PDF | School Admin |
