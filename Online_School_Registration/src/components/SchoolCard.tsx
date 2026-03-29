@@ -93,7 +93,7 @@ export function SchoolCard({ school }: SchoolCardProps) {
       </div>
 
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="font-display text-xl">{t('schools.detailTitle')}</DialogTitle>
             <DialogDescription>{school.name}</DialogDescription>
@@ -101,8 +101,8 @@ export function SchoolCard({ school }: SchoolCardProps) {
 
           <div className="space-y-5">
             {/* School header - logo, name, location at top */}
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-xl bg-secondary flex items-center justify-center overflow-hidden flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-secondary flex items-center justify-center overflow-hidden flex-shrink-0">
                 {school.logo_url ? (
                   <img src={school.logo_url} alt={school.name} className="w-full h-full object-cover" />
                 ) : (
@@ -128,7 +128,7 @@ export function SchoolCard({ school }: SchoolCardProps) {
             {/* Description */}
             {school.description && (
               <div className="space-y-2">
-                <h4 className="font-semibold text-sm text-foreground">About</h4>
+                <h4 className="font-semibold text-sm text-foreground">{t('schools.about')}</h4>
                 <p className="text-sm text-muted-foreground leading-relaxed">{school.description}</p>
               </div>
             )}
@@ -159,10 +159,10 @@ export function SchoolCard({ school }: SchoolCardProps) {
             {/* Apply Button */}
             <div className="pt-2 border-t">
               <p className="text-sm text-muted-foreground mb-3">
-                {!user ? 'Create an account or sign in to apply to this school.' : 'Ready to apply? Click below to start your application.'}
+                {!user ? t('schools.createAccountToApply') : t('schools.applyNow')}
               </p>
               <Button className="w-full" size="lg" onClick={() => { setDetailsOpen(false); handleApply(); }}>
-                {user ? t('schools.applyNow') : 'Sign Up to Apply'}
+                {user ? t('schools.applyNow') : t('schools.signUpToApply')}
               </Button>
             </div>
           </div>

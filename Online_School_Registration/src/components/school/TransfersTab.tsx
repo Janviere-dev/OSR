@@ -122,9 +122,20 @@ export function TransfersTab({ applications, schoolId }: TransfersTabProps) {
           .eq('id', existing.id);
         if (error) throw error;
       }
+
+      // When payment is confirmed as paid, enroll the student
+      if (newStatus === 'paid') {
+        const { error: studentError } = await supabase
+          .from('students')
+          .update({ status: 'enrolled' as const })
+          .eq('id', studentId);
+        if (studentError) throw studentError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transfers-payments', schoolId] });
+      queryClient.invalidateQueries({ queryKey: ['school-applications'] });
+      queryClient.invalidateQueries({ queryKey: ['school-students'] });
     },
   });
 
@@ -147,15 +158,17 @@ export function TransfersTab({ applications, schoolId }: TransfersTabProps) {
     mutationFn: async ({ applicationId, studentId, classStream, grade }: { applicationId: string; studentId: string; classStream: string; grade: string }) => {
       const studentIdCode = generateStudentId();
 
+      // Assign class/ID but keep student status as 'pending' until payment is confirmed
       const { error: studentError } = await supabase
         .from('students')
-        .update({ status: 'enrolled', class_stream: classStream, current_grade: grade, student_id_code: studentIdCode, school_id: schoolId })
+        .update({ status: 'pending', class_stream: classStream, current_grade: grade, student_id_code: studentIdCode, school_id: schoolId })
         .eq('id', studentId);
       if (studentError) throw studentError;
 
+      // Mark application as approved — will become 'enrolled' after payment
       const { error: appError } = await supabase
         .from('applications')
-        .update({ status: 'enrolled' })
+        .update({ status: 'approved' })
         .eq('id', applicationId);
       if (appError) throw appError;
 
@@ -242,6 +255,8 @@ export function TransfersTab({ applications, schoolId }: TransfersTabProps) {
     switch (status) {
       case 'approved':
         return <Badge className="bg-green-600 text-white"><CheckCircle className="w-3 h-3 mr-1" />{t('school.status.approved')}</Badge>;
+      case 'enrolled':
+        return <Badge className="bg-blue-600 text-white"><CheckCircle className="w-3 h-3 mr-1" />{t('school.status.enrolled')}</Badge>;
       case 'rejected':
         return <Badge className="bg-red-600 text-white"><XCircle className="w-3 h-3 mr-1" />{t('school.status.rejected')}</Badge>;
       default:
@@ -326,7 +341,7 @@ export function TransfersTab({ applications, schoolId }: TransfersTabProps) {
       </div>
 
       <Dialog open={detailsDialog} onOpenChange={setDetailsDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           {selectedApp && (
             <>
               <DialogHeader>
@@ -334,7 +349,7 @@ export function TransfersTab({ applications, schoolId }: TransfersTabProps) {
                 <DialogDescription>{t('school.transfers.verifyTransfer')}</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">{t('school.details.studentName')}</label>
                     <p className="font-medium">{selectedApp.students.name}</p>
@@ -356,31 +371,31 @@ export function TransfersTab({ applications, schoolId }: TransfersTabProps) {
                 </div>
 
                 <div className="p-4 bg-muted rounded-lg space-y-2">
-                  <h4 className="font-medium text-sm">Parent Contact Information</h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
+                  <h4 className="font-medium text-sm">{t('school.details.parentContact')}</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                     {selectedApp.students.mother_name && (
                       <div>
-                        <span className="text-muted-foreground">Mother:</span>
+                        <span className="text-muted-foreground">{t('school.details.motherLabel')}</span>
                         <p className="font-medium">{selectedApp.students.mother_name}</p>
                         {selectedApp.students.mother_phone && <p className="text-xs">{selectedApp.students.mother_phone}</p>}
                       </div>
                     )}
                     {selectedApp.students.father_name && (
                       <div>
-                        <span className="text-muted-foreground">Father:</span>
+                        <span className="text-muted-foreground">{t('school.details.fatherLabel')}</span>
                         <p className="font-medium">{selectedApp.students.father_name}</p>
                         {selectedApp.students.father_phone && <p className="text-xs">{selectedApp.students.father_phone}</p>}
                       </div>
                     )}
                     {selectedApp.students.parent_email && (
                       <div>
-                        <span className="text-muted-foreground">Email:</span>
+                        <span className="text-muted-foreground">{t('school.details.emailLabel')}</span>
                         <p className="text-xs">{selectedApp.students.parent_email}</p>
                       </div>
                     )}
                     {selectedApp.students.parent_phone && (
                       <div>
-                        <span className="text-muted-foreground">Phone:</span>
+                        <span className="text-muted-foreground">{t('school.details.phoneLabel')}</span>
                         <p className="text-xs">{selectedApp.students.parent_phone}</p>
                       </div>
                     )}

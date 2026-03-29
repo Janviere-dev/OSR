@@ -275,7 +275,7 @@ export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
     printWindow.document.close();
     printWindow.print();
 
-    toast({ title: 'PDF Ready', description: `${grade} Class ${stream} class list opened for printing/saving as PDF.` });
+    toast({ title: t('school.students.pdfReady'), description: `${grade} Class ${stream} ${t('school.students.pdfDesc')}` });
   };
 
   const toggleGrade = (grade: string) => {
@@ -380,7 +380,7 @@ export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
                                         onClick={() => handleExportSheet(grade, stream, streamStudents)}
                                       >
                                         <FileText className="w-4 h-4 mr-1" />
-                                        Export PDF
+                                        {t('school.students.exportPdf')}
                                       </Button>
                                       <TooltipProvider>
                                         <Tooltip>
@@ -392,10 +392,10 @@ export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
                                               onClick={() => handleClearSheet(grade, stream, streamStudents)}
                                             >
                                               <Trash2 className="w-4 h-4 mr-1" />
-                                              Clear & Notify
+                                              {t('school.students.clearNotify')}
                                             </Button>
                                           </TooltipTrigger>
-                                          <TooltipContent>Clear this class for the new academic year and notify parents.</TooltipContent>
+                                          <TooltipContent>{t('school.students.clearNotifyDesc')}</TooltipContent>
                                         </Tooltip>
                                       </TooltipProvider>
                                     </>
@@ -407,7 +407,7 @@ export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
                               <div className="border-t overflow-x-auto">
                                 {streamStudents.length === 0 ? (
                                   <div className="p-4 text-center text-muted-foreground text-sm">
-                                    No students in this class yet
+                                    {t('school.students.noStudentsInClass')}
                                   </div>
                                 ) : (
                                   <Table>
@@ -416,8 +416,8 @@ export function StudentManagementTab({ schoolId }: StudentManagementTabProps) {
                                       <TableHead>#</TableHead>
                                       <TableHead>{t('school.students.studentId')}</TableHead>
                                       <TableHead>{t('school.table.student')}</TableHead>
-                                      <TableHead>Payment</TableHead>
-                                      <TableHead>Documents</TableHead>
+                                      <TableHead>{t('school.students.payment')}</TableHead>
+                                      <TableHead>{t('school.students.documents')}</TableHead>
                                       <TableHead>{t('school.students.class')}</TableHead>
                                     </TableRow>
                                     </TableHeader>

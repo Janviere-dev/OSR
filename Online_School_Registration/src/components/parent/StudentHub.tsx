@@ -152,7 +152,7 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'enrolled':
-        return <Badge className="bg-blue-600 text-white">Enrolled</Badge>;
+        return <Badge className="bg-blue-600 text-white">{t('hub.enrolled')}</Badge>;
       case 'passed':
         return <Badge className="bg-green-600 text-white">{t('hub.status.passed')}</Badge>;
       case 'repeat':
@@ -185,7 +185,7 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 text-sm">
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-muted-foreground" />
             <span>{format(new Date(student.dob), 'MMM d, yyyy')}</span>
@@ -260,7 +260,7 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
               </div>
               <div>
                 <CardTitle className="text-lg">{t('hub.reregister')}</CardTitle>
-                <CardDescription>Re-register your child for the new academic year</CardDescription>
+                <CardDescription>{t('hub.reregisterDesc')}</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -268,16 +268,16 @@ const StudentHub = ({ onBack }: StudentHubProps) => {
             {!showReregister ? (
               <Button onClick={() => setShowReregister(true)} variant="outline" className="w-full">
                 <RefreshCw className="w-4 h-4 mr-2" />
-                Start Re-registration
+                {t('hub.startReregister')}
               </Button>
             ) : (
               <div className="space-y-4">
                 {/* Select Student */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Select Student</label>
+                  <label className="text-sm font-medium">{t('hub.selectStudent')}</label>
                   <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Choose a student" />
+                      <SelectValue placeholder={t('hub.selectStudent')} />
                     </SelectTrigger>
                     <SelectContent>
                       {acceptedStudents.map((s: any) => (

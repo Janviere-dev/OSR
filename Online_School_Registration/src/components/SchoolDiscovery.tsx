@@ -88,7 +88,7 @@ export function SchoolDiscovery() {
 
         {/* Filters */}
         <div className="bg-card p-6 rounded-xl border border-border/50 shadow-card mb-8">
-          <div className="grid md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -106,7 +106,7 @@ export function SchoolDiscovery() {
                 <SelectValue placeholder={t('schools.filter.province')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Provinces</SelectItem>
+                <SelectItem value="all">{t('schools.allProvinces')}</SelectItem>
                 {provinces.map((province) => (
                   <SelectItem key={province} value={province}>
                     {province}
@@ -125,7 +125,7 @@ export function SchoolDiscovery() {
                 <SelectValue placeholder={t('schools.filter.district')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Districts</SelectItem>
+                <SelectItem value="all">{t('schools.allDistricts')}</SelectItem>
                 {availableDistricts.map((district) => (
                   <SelectItem key={district} value={district}>
                     {district}
@@ -144,7 +144,7 @@ export function SchoolDiscovery() {
                 <SelectValue placeholder={t('schools.filter.sector')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Sectors</SelectItem>
+                <SelectItem value="all">{t('schools.allSectors')}</SelectItem>
                 {availableSectors.map((sector) => (
                   <SelectItem key={sector} value={sector}>
                     {sector}
@@ -161,7 +161,7 @@ export function SchoolDiscovery() {
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : filteredSchools.length > 0 ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredSchools.map((school) => (
               <SchoolCard key={school.id} school={school} />
             ))}
@@ -169,7 +169,7 @@ export function SchoolDiscovery() {
         ) : (
           <div className="text-center py-16">
             <p className="text-muted-foreground text-lg">
-              No schools found matching your criteria. Try adjusting your filters.
+              {t('schools.noResults')}
             </p>
           </div>
         )}

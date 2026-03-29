@@ -203,7 +203,7 @@ export function ReRegistrationsTab({ applications, schoolId }: ReRegistrationsTa
                 <DialogTitle>{t('rereg.detailsTitle')}</DialogTitle>
               </DialogHeader>
               <div className="space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div><label className="text-muted-foreground">{t('rereg.student')}</label><p className="font-medium">{selectedApp.students.name}</p></div>
                   <div><label className="text-muted-foreground">{t('rereg.id')}</label><p className="font-mono">{selectedApp.students.student_id_code}</p></div>
                   <div><label className="text-muted-foreground">{t('rereg.previousClass')}</label><p>{selectedApp.previous_school_name?.replace('Re-registration from ', '')}</p></div>

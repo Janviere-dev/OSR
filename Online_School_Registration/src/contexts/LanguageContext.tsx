@@ -255,6 +255,7 @@ export const translations: Translations = {
   'school.table.actions': { en: 'Actions', rw: 'Ibikorwa' },
   
   'school.status.approved': { en: 'Approved', rw: 'Byemejwe' },
+  'school.status.enrolled': { en: 'Enrolled', rw: 'Yandikishijwe' },
   'school.status.rejected': { en: 'Rejected', rw: 'Byanzwe' },
   'school.status.pending': { en: 'Pending', rw: 'Bitegereje' },
   
@@ -514,6 +515,44 @@ export const translations: Translations = {
   'schools.description': { en: 'School Description', rw: 'Ibisobanuro by\'Ishuri' },
   'schools.viewRequirements': { en: 'View Requirements', rw: 'Reba Ibisabwa' },
   'schools.downloadRequirementsBtn': { en: 'Download Requirements', rw: 'Kuramo Ibisabwa' },
+  'schools.about': { en: 'About', rw: 'Ibyerekeye' },
+  'schools.signUpToApply': { en: 'Sign Up to Apply', rw: 'Iyandikishe Kugira Ngo Usabe' },
+  'schools.createAccountToApply': { en: 'Create an account or sign in to apply to this school.', rw: 'Fungura konti cyangwa injira kugira ngo usabe muri iri shuri.' },
+  'schools.allProvinces': { en: 'All Provinces', rw: 'Intara Zose' },
+  'schools.allDistricts': { en: 'All Districts', rw: 'Akarere Kose' },
+  'schools.allSectors': { en: 'All Sectors', rw: 'Imirenge Yose' },
+  'schools.noResults': { en: 'No schools found matching your criteria. Try adjusting your filters.', rw: 'Nta mashuri abonetse akurikije ibyifuzo byawe. Gerageza guhindura uburyo bwo gushakisha.' },
+
+  // StudentHub
+  'hub.enrolled': { en: 'Enrolled', rw: 'Yandikishijwe' },
+  'hub.reregisterDesc': { en: 'Re-register your child for the new academic year', rw: 'Ongera wiyandikishe umwana wawe ku mwaka mushya w\'amashuri' },
+  'hub.startReregister': { en: 'Start Re-registration', rw: 'Tangira Kongera Kwiyandikisha' },
+  'hub.selectStudent': { en: 'Select Student', rw: 'Hitamo Umunyeshuri' },
+
+  // Transfer details dialog
+  'school.details.parentContact': { en: 'Parent Contact Information', rw: 'Amakuru yo Gutumanahana n\'Umubyeyi' },
+  'school.details.emailLabel': { en: 'Email:', rw: 'Imeyili:' },
+  'school.details.phoneLabel': { en: 'Phone:', rw: 'Telefoni:' },
+  'school.details.motherLabel': { en: 'Mother:', rw: 'Mama:' },
+  'school.details.fatherLabel': { en: 'Father:', rw: 'Papa:' },
+  'school.details.studentIdLabel': { en: 'Student ID', rw: 'ID y\'Umunyeshuri' },
+
+  // New applications details
+  'school.details.parentInfo': { en: 'Parent Information', rw: 'Amakuru y\'Umubyeyi' },
+  'school.details.reregDetails': { en: 'Re-registration Details', rw: 'Ibisobanuro byo Kongera Kwiyandikisha' },
+  'school.details.previousClass': { en: 'Previous Class:', rw: 'Ishami rya Mbere:' },
+  'school.details.newClass': { en: 'New Class:', rw: 'Ishami Rishya:' },
+  'school.details.uploadedDocs': { en: 'Uploaded Documents', rw: 'Impapuro Zashyizwemo' },
+  'school.details.paymentProof': { en: 'Payment Proof', rw: 'Icyemezo cy\'Ubwishyu' },
+  'school.details.viewPaymentProof': { en: 'View Payment Proof', rw: 'Reba Icyemezo cy\'Ubwishyu' },
+
+  // Student management tab
+  'school.students.payment': { en: 'Payment', rw: 'Kwishyura' },
+  'school.students.documents': { en: 'Documents', rw: 'Impapuro' },
+  'school.students.noStudentsInClass': { en: 'No students in this class yet', rw: 'Nta banyeshuri bahari muri iki cyiciro' },
+  'school.students.pdfReady': { en: 'PDF Ready', rw: 'PDF Iteganyijwe' },
+  'school.students.pdfDesc': { en: 'class list opened for printing/saving as PDF.', rw: 'urutonde rw\'ishami rufunguwe guterwa/kubikwa nka PDF.' },
+  'school.students.classExported': { en: 'Class exported', rw: 'Ishami Ryakuwe' },
 };
 
 interface LanguageContextType {

@@ -203,10 +203,8 @@ const ChatInbox = ({ role, onBack }: ChatInboxProps) => {
         .from('payments').select('id, student_id, parent_id, school_id').eq('id', paymentId).single();
       if (paymentError) throw paymentError;
       await supabase.from('payments').update({ status: 'paid' }).eq('id', paymentId);
-      await supabase.from('applications').update({ status: 'enrolled' })
-        .eq('student_id', payment.student_id).eq('school_id', payment.school_id)
-        .not('status', 'in', '("enrolled","rejected")');
       const { data: student } = await supabase.from('students').select('name').eq('id', payment.student_id).single();
+      // Enroll the student — application status stays as 'approved' set by the admin
       await supabase.from('students').update({ status: 'enrolled' as const }).eq('id', payment.student_id);
       if (student) {
         await sendSystemMessage({

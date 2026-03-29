@@ -117,10 +117,20 @@ export function NewApplicationsTab({ applications, schoolId }: NewApplicationsTa
           .eq('id', existing.id);
         if (error) throw error;
       }
+
+      // When payment is confirmed as paid, enroll the student
+      if (newStatus === 'paid') {
+        const { error: studentError } = await supabase
+          .from('students')
+          .update({ status: 'enrolled' as const })
+          .eq('id', studentId);
+        if (studentError) throw studentError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['app-payments', schoolId] });
       queryClient.invalidateQueries({ queryKey: ['school-applications'] });
+      queryClient.invalidateQueries({ queryKey: ['school-students'] });
     },
     onError: (error: Error) => {
       toast({ title: t('school.approval.error'), description: error.message, variant: 'destructive' });
@@ -339,7 +349,7 @@ export function NewApplicationsTab({ applications, schoolId }: NewApplicationsTa
       </div>
 
       <Dialog open={detailsDialog} onOpenChange={setDetailsDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           {selectedApp && (
             <>
               <DialogHeader>
@@ -347,7 +357,7 @@ export function NewApplicationsTab({ applications, schoolId }: NewApplicationsTa
                 <DialogDescription>{t('school.details.subtitle')}</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">{t('school.details.studentName')}</label>
                     <p className="font-medium">{selectedApp.students.name}</p>
@@ -379,8 +389,8 @@ export function NewApplicationsTab({ applications, schoolId }: NewApplicationsTa
                 </div>
 
                 <div className="p-4 bg-muted rounded-lg space-y-3">
-                  <h4 className="font-medium">Parent Information</h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
+                  <h4 className="font-medium">{t('school.details.parentInfo')}</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                     {selectedApp.students.mother_name && (
                       <div>
                         <label className="text-muted-foreground">{t('school.details.mother')}</label>
@@ -416,9 +426,9 @@ export function NewApplicationsTab({ applications, schoolId }: NewApplicationsTa
 
                 {selectedApp.previous_school_name?.startsWith('Re-registration') && (
                   <div className="p-4 bg-accent/10 border border-accent/30 rounded-lg space-y-2">
-                    <h4 className="font-medium">Re-registration Details</h4>
-                    <p className="text-sm"><strong>Previous Class:</strong> {selectedApp.previous_school_name?.replace('Re-registration from ', '')}</p>
-                    <p className="text-sm"><strong>New Class:</strong> {selectedApp.transfer_reason?.replace('Moving to ', '')}</p>
+                    <h4 className="font-medium">{t('school.details.reregDetails')}</h4>
+                    <p className="text-sm"><strong>{t('school.details.previousClass')}</strong> {selectedApp.previous_school_name?.replace('Re-registration from ', '')}</p>
+                    <p className="text-sm"><strong>{t('school.details.newClass')}</strong> {selectedApp.transfer_reason?.replace('Moving to ', '')}</p>
                   </div>
                 )}
 
@@ -429,7 +439,7 @@ export function NewApplicationsTab({ applications, schoolId }: NewApplicationsTa
                     if (transcriptLinks.length > 0) {
                       return (
                         <div className="space-y-2">
-                          <p className="text-sm text-muted-foreground">Uploaded Documents ({transcriptLinks.length})</p>
+                          <p className="text-sm text-muted-foreground">{t('school.details.uploadedDocs')} ({transcriptLinks.length})</p>
                           <div className="flex flex-wrap gap-2">
                             {transcriptLinks.map((ref, i) => (
                               <Button key={i} variant="outline" size="sm" onClick={() => void openDocument(ref)}>
@@ -447,10 +457,10 @@ export function NewApplicationsTab({ applications, schoolId }: NewApplicationsTa
 
                   {splitStoredReferences((paymentMap as any)[selectedApp.students.id]?.proof_url)[0] && (
                     <div className="mt-2">
-                      <p className="text-sm text-muted-foreground mb-1">Payment Proof</p>
+                      <p className="text-sm text-muted-foreground mb-1">{t('school.details.paymentProof')}</p>
                       <Button variant="outline" size="sm" onClick={() => void openDocument(splitStoredReferences((paymentMap as any)[selectedApp.students.id].proof_url)[0])}>
                         <CreditCard className="w-4 h-4 mr-2" />
-                        View Payment Proof
+                        {t('school.details.viewPaymentProof')}
                         <Download className="w-3 h-3 ml-2" />
                       </Button>
                     </div>

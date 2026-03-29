@@ -64,7 +64,7 @@ const ParentDashboard = () => {
             </div>
 
             {/* Action Cards */}
-            <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-4xl mx-auto">
               {/* Register New Student */}
               <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary/50" onClick={() => setActiveView('register')}>
                 <CardHeader className="text-center">
