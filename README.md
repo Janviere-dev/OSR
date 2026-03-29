@@ -1,4 +1,4 @@
-# Online School Registration (OSR) — Rwanda
+# Online School Registration (OSR) Rwanda
 
 A full-stack web application for managing school registrations, student transfers, payments, and government reporting across Rwanda. Built with React, Vite, Supabase, and Tailwind CSS.
 
@@ -76,14 +76,14 @@ npm install
 
 ## 3. Supabase Project Setup
 
-### Step 1 — Create an account and project
+### Step 1: Create an account and project
 
 1. Go to **https://app.supabase.com** and create a free account if you don't have one.
 2. Click **New Project**.
 3. Fill in: project name, database password, and region closest to Rwanda (e.g. `eu-west-1`).
 4. Click **Create new project** and wait ~2 minutes for provisioning to complete.
 
-### Step 2 — Get your API keys
+### Step 2: Get your API keys
 
 1. In your project dashboard, go to **Settings → API**.
 2. Copy two values:
@@ -110,7 +110,7 @@ Run the queries **in order** — each one builds on the previous.
 
 ---
 
-### Query 1 — Core Tables, Enums, RLS & Triggers
+### Query 1:  Core Tables, Enums, RLS and Triggers
 
 This is the foundation. It creates all enums, the core tables (`profiles`, `user_roles`, `schools`, `students`, `applications`), enables Row Level Security, adds all access policies, timestamp triggers, and the auto-profile trigger on signup.
 
@@ -379,7 +379,7 @@ CREATE TRIGGER on_auth_user_created
 
 ---
 
-### Query 2 — Storage Buckets & Extra Columns
+### Query 2: Storage Buckets and Extra Columns
 
 Creates the `student-documents` storage bucket and adds extra columns to existing tables.
 
@@ -431,7 +431,7 @@ ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS transfer_reason text;
 
 ---
 
-### Query 3 — Class Stream & School Admin Student Policy
+### Query 3: Class Stream and School Admin Student Policy
 
 Adds the `class_stream` column to students and a policy allowing school admins to update students enrolled in their school.
 
@@ -453,7 +453,7 @@ USING (
 
 ---
 
-### Query 4 — School Logos Bucket
+### Query 4: School Logos Bucket
 
 Creates the public `school-logos` storage bucket for school logo and showcase images.
 
@@ -486,7 +486,7 @@ USING (
 
 ---
 
-### Query 5 — School Documents Bucket & Requirements PDF
+### Query 5: School Documents Bucket and Requirements PDF
 
 Creates the public `school-documents` bucket for admission requirement PDFs and adds the `requirements_pdf_url` column to schools.
 
@@ -530,7 +530,7 @@ USING (
 
 ---
 
-### Query 6 — Payments Table
+### Query 6: Payments Table
 
 Creates the `payments` table with RLS policies and a timestamp trigger.
 
@@ -591,7 +591,7 @@ EXECUTE FUNCTION public.update_updated_at_column();
 
 ---
 
-### Query 7 — Fix Payments Update Policy
+### Query 7: Fix Payments Update Policy
 
 Replaces the overly permissive service-role update policy with a scoped one that only allows parents to update their own pending payments.
 
@@ -607,7 +607,7 @@ USING (parent_id = auth.uid());
 
 ---
 
-### Query 8 — Payments: Proof URL & Remove Flutterwave Constraints
+### Query 8: Payments: Proof URL and Remove Flutterwave Constraints
 
 Adds the `proof_payment_url` column for manual payment proof uploads and makes the Flutterwave fields nullable (payment gateway was replaced with manual proof upload).
 
@@ -636,7 +636,7 @@ ALTER TABLE public.students ADD COLUMN IF NOT EXISTS parent_email text;
 
 ---
 
-### Query 10 — Messages Table & Realtime
+### Query 10: Messages Table and Realtime
 
 Creates the `messages` table for the two-way chat inbox between parents and school admins, with RLS policies and Supabase Realtime enabled.
 
@@ -677,7 +677,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
 
 ---
 
-### Query 11 — Parent Phone Fields on Students
+### Query 11: Parent Phone Fields on Students
 
 Adds mother and father phone number columns to the students table.
 
@@ -688,7 +688,7 @@ ALTER TABLE public.students ADD COLUMN IF NOT EXISTS father_phone text;
 
 ---
 
-### Query 12 — Enrolled Status, School Description & Payment Admin Policy
+### Query 12: Enrolled Status, School Description and Payment Admin Policy
 
 Adds the `enrolled` value to the student status enum, adds `description` and `showcase_image_url` columns to schools, and adds a policy so school admins can update payments for their school (needed for the Mark as Paid flow).
 
@@ -723,7 +723,7 @@ WITH CHECK (
 
 ---
 
-### Query 13 — Remove Flutterwave Columns
+### Query 13: Remove Flutterwave Columns
 
 Removes the unused Flutterwave payment gateway columns (payment was switched to manual proof-of-payment upload).
 
@@ -738,14 +738,14 @@ ALTER TABLE public.payments DROP COLUMN IF EXISTS flutterwave_tx_id;
 
 The `resolve-document-url` edge function generates time-limited signed URLs so users can securely open uploaded documents.
 
-### Step 1 — Log in to Supabase CLI
+### Step 1: Log in to Supabase CLI
 
 ```bash
 supabase login
 # A browser window opens — authenticate and return to the terminal
 ```
 
-### Step 2 — Link your project
+### Step 2: Link your project
 
 Run this from inside the `Online_School_Registration/` folder:
 
@@ -755,7 +755,7 @@ supabase link --project-ref YOUR_PROJECT_REF
 
 `YOUR_PROJECT_REF` is the string between `https://` and `.supabase.co` in your project URL.
 
-### Step 3 — Deploy the function
+### Step 3: Deploy the function
 
 ```bash
 supabase functions deploy resolve-document-url
@@ -785,7 +785,7 @@ The `.env` file is listed in `.gitignore` and will never be committed to Git.
 
 ---
 
-## 7. Install & Run Locally
+## 7. Install and Run Locally
 
 ```bash
 # From inside the Online_School_Registration/ folder:
@@ -907,21 +907,21 @@ Online_School_Registration/
 
 | Feature | Who uses it |
 |---------|------------|
-| School discovery, search & filter by location | Everyone (public) |
+| School discovery, search and filter by location | Everyone (public) |
 | View school details, showcase image, requirements PDF | Everyone (public) |
 | Register new student | Parent |
 | Transfer student to another school | Parent |
 | Re-register for new academic year | Parent |
 | Upload payment proof (PDF) | Parent |
-| Student Hub — view all children, search by ID, check status | Parent |
-| Review & approve / reject applications | School Admin |
+| Student Hub: view all children, search by ID, check status | Parent |
+| Review and approve / reject applications | School Admin |
 | Assign grade, class stream, generate student ID | School Admin |
-| Student Management — class sheets, clear for new year | School Admin |
+| Student Management:  class sheets, clear for new year | School Admin |
 | Export class list as PDF | School Admin |
-| Chat Inbox — real-time two-way messaging with read receipts | Parent + School Admin |
-| Government Portal — SDMS Excel export (per class + full school) | School Admin |
-| School Settings — logo, showcase image, description, requirements PDF | School Admin |
-| Bilingual UI — English & Kinyarwanda | Everyone |
+| Chat Inbox:  real-time two-way messaging with read receipts | Parent + School Admin |
+| Government Portal: SDMS Excel export (per class + full school) | School Admin |
+| School Settings:  logo, showcase image, description, requirements PDF | School Admin |
+| Bilingual UI:  English andKinyarwanda | Everyone |
 
 ---
 
