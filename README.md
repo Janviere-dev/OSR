@@ -723,7 +723,7 @@ WITH CHECK (
 
 ---
 
-### Query 13 — Remove Flutterwave Columns
+### Query 13: Remove Flutterwave Columns
 
 Removes the unused Flutterwave payment gateway columns (payment was switched to manual proof-of-payment upload).
 
@@ -907,7 +907,7 @@ Online_School_Registration/
 
 | Feature | Who uses it |
 |---------|------------|
-| School discovery, search & filter by location | Everyone (public) |
+| School discovery, search and filter by location | Everyone (public) |
 | View school details, showcase image, requirements PDF | Everyone (public) |
 | Register new student | Parent |
 | Transfer student to another school | Parent |
@@ -916,12 +916,12 @@ Online_School_Registration/
 | Student Hub — view all children, search by ID, check status | Parent |
 | Review & approve / reject applications | School Admin |
 | Assign grade, class stream, generate student ID | School Admin |
-| Student Management — class sheets, clear for new year | School Admin |
+| Student Management:  class sheets, clear for new year | School Admin |
 | Export class list as PDF | School Admin |
-| Chat Inbox — real-time two-way messaging with read receipts | Parent + School Admin |
-| Government Portal — SDMS Excel export (per class + full school) | School Admin |
-| School Settings — logo, showcase image, description, requirements PDF | School Admin |
-| Bilingual UI — English & Kinyarwanda | Everyone |
+| Chat Inbox:  real-time two-way messaging with read receipts | Parent + School Admin |
+| Government Portal: SDMS Excel export (per class + full school) | School Admin |
+| School Settings:  logo, showcase image, description, requirements PDF | School Admin |
+| Bilingual UI:  English andKinyarwanda | Everyone |
 
 ---
 
