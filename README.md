@@ -94,7 +94,7 @@ npm install
 
 ---
 
-## 4. Database Setup — SQL Editor
+## 4. Database Setup and SQL Editor
 
 All database tables, policies, enums, triggers, and storage buckets are created by running SQL queries directly in the Supabase dashboard.
 
@@ -806,7 +806,7 @@ npm run lint        # Run ESLint
 
 ---
 
-## 8. First Login & Roles
+## 8. First Login and Roles
 
 1. Open http://localhost:5173
 2. Click **Sign Up**
