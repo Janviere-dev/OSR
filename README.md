@@ -9,24 +9,24 @@ A full-stack web application for managing school registrations, student transfer
 1. [Prerequisites](#1-prerequisites)
 2. [Clone the Project](#2-clone-the-project)
 3. [Supabase Project Setup](#3-supabase-project-setup)
-4. [Database Setup — SQL Editor](#4-database-setup--sql-editor)
-   - [Query 1 — Core Tables, Enums, RLS & Triggers](#query-1--core-tables-enums-rls--triggers)
-   - [Query 2 — Storage Buckets & Extra Columns](#query-2--storage-buckets--extra-columns)
-   - [Query 3 — Class Stream & School Admin Student Policy](#query-3--class-stream--school-admin-student-policy)
-   - [Query 4 — School Logos Bucket](#query-4--school-logos-bucket)
-   - [Query 5 — School Documents Bucket & Requirements PDF](#query-5--school-documents-bucket--requirements-pdf)
-   - [Query 6 — Payments Table](#query-6--payments-table)
-   - [Query 7 — Fix Payments Update Policy](#query-7--fix-payments-update-policy)
-   - [Query 8 — Payments: Proof URL & Remove Flutterwave Constraints](#query-8--payments-proof-url--remove-flutterwave-constraints)
-   - [Query 9 — Parent Contact Fields on Students](#query-9--parent-contact-fields-on-students)
-   - [Query 10 — Messages Table & Realtime](#query-10--messages-table--realtime)
-   - [Query 11 — Parent Phone Fields on Students](#query-11--parent-phone-fields-on-students)
-   - [Query 12 — Enrolled Status, School Description & Payment Admin Policy](#query-12--enrolled-status-school-description--payment-admin-policy)
-   - [Query 13 — Remove Flutterwave Columns](#query-13--remove-flutterwave-columns)
+4. [Database Setup: SQL Editor](#4-database-setup--sql-editor)
+   - [Query 1: Core Tables, Enums, RLS & Triggers](#query-1--core-tables-enums-rls--triggers)
+   - [Query 2: Storage Buckets & Extra Columns](#query-2--storage-buckets--extra-columns)
+   - [Query 3: Class Stream & School Admin Student Policy](#query-3--class-stream--school-admin-student-policy)
+   - [Query 4: School Logos Bucket](#query-4--school-logos-bucket)
+   - [Query 5: School Documents Bucket & Requirements PDF](#query-5--school-documents-bucket--requirements-pdf)
+   - [Query 6: Payments Table](#query-6--payments-table)
+   - [Query 7: Fix Payments Update Policy](#query-7--fix-payments-update-policy)
+   - [Query 8: Payments: Proof URL & Remove Flutterwave Constraints](#query-8--payments-proof-url--remove-flutterwave-constraints)
+   - [Query 9: Parent Contact Fields on Students](#query-9--parent-contact-fields-on-students)
+   - [Query 10: Messages Table & Realtime](#query-10--messages-table--realtime)
+   - [Query 11: Parent Phone Fields on Students](#query-11--parent-phone-fields-on-students)
+   - [Query 12: Enrolled Status, School Description & Payment Admin Policy](#query-12--enrolled-status-school-description--payment-admin-policy)
+   - [Query 13: Remove Flutterwave Columns](#query-13--remove-flutterwave-columns)
 5. [Deploy the Edge Function](#5-deploy-the-edge-function)
 6. [Environment Variables](#6-environment-variables)
-7. [Install & Run Locally](#7-install--run-locally)
-8. [First Login & Roles](#8-first-login--roles)
+7. [Install and Run Locally](#7-install--run-locally)
+8. [First Login and Roles](#8-first-login--roles)
 9. [Deploy to Netlify](#9-deploy-to-netlify)
 10. [Project Structure](#10-project-structure)
 11. [Features Overview](#11-features-overview)
@@ -625,7 +625,7 @@ ALTER TABLE public.payments ALTER COLUMN description SET DEFAULT NULL;
 
 ---
 
-### Query 9 — Parent Contact Fields on Students
+### Query 9: Parent Contact Fields on Students
 
 Adds parent phone and email directly on the student record for easier access by school admins.
 
@@ -811,8 +811,8 @@ npm run lint        # Run ESLint
 1. Open http://localhost:5173
 2. Click **Sign Up**
 3. Select your role:
-   - **Parent** — register and manage your children's school applications, upload payment proof, chat with school admins
-   - **School Administrator** — manage your school profile, review and approve applications, manage students, export SDMS reports
+   - **Parent**:  register and manage your children's school applications, upload payment proof, chat with school admins
+   - **School Administrator**: manage your school profile, review and approve applications, manage students, export SDMS reports
 4. School admins are prompted to complete their school profile on first login
 
 ---
